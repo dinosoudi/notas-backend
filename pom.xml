@@ -1,0 +1,338 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+         https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.3.6</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>com.taskflow</groupId>
+    <artifactId>taskflow-backend</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <name>taskflow-backend</name>
+    <description>TaskFlow — API REST con Spring Boot, PostgreSQL y AWS</description>
+    <packaging>jar</packaging>
+
+    <!-- ─────────────────────────────────────────
+         VERSIONES CENTRALIZADAS
+         Cambiar versión aquí la actualiza en todo el pom
+    ───────────────────────────────────────── -->
+    <properties>
+        <java.version>21</java.version>
+
+        <!-- JWT -->
+        <jjwt.version>0.12.6</jjwt.version>
+
+        <!-- AWS SDK v2 -->
+        <aws.sdk.version>2.26.12</aws.sdk.version>
+
+        <!-- MapStruct -->
+        <mapstruct.version>1.6.2</mapstruct.version>
+
+        <!-- Lombok + MapStruct processor — deben ir juntos -->
+        <lombok-mapstruct-binding.version>0.2.0</lombok-mapstruct-binding.version>
+
+        <!-- Testcontainers -->
+        <testcontainers.version>1.20.1</testcontainers.version>
+
+        <!-- SonarCloud — solo se usa en el pipeline, no requiere cambios aquí -->
+        <sonar.organization>tu-org-en-sonarcloud</sonar.organization>
+        <sonar.host.url>https://sonarcloud.io</sonar.host.url>
+        <!-- Jacoco genera el reporte que SonarCloud consume -->
+        <jacoco.version>0.8.12</jacoco.version>
+    </properties>
+
+    <dependencies>
+
+        <!-- ══════════════════════════════════════
+             CORE — Spring Boot Starters
+        ══════════════════════════════════════ -->
+
+        <!-- API REST -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
+        <!-- JPA + Hibernate — queries y stored procedures -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+
+        <!-- Seguridad — JWT filters, bcrypt, protección de endpoints -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+
+        <!-- Validación — @NotBlank, @Email, @Size en DTOs -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+
+        <!-- Actuator — /health para Kubernetes liveness/readiness probes -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
+        <!-- ══════════════════════════════════════
+             BASE DE DATOS
+        ══════════════════════════════════════ -->
+
+        <!-- Driver PostgreSQL -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- Flyway — versionado de migraciones y stored procedures -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+        <!-- Flyway necesita este módulo específico para PostgreSQL -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+        </dependency>
+
+        <!-- ══════════════════════════════════════
+             JWT — JJWT (no está en Initializr)
+        ══════════════════════════════════════ -->
+
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-api</artifactId>
+            <version>${jjwt.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-impl</artifactId>
+            <version>${jjwt.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-jackson</artifactId>
+            <version>${jjwt.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- ══════════════════════════════════════
+             AWS SDK v2 (no están en Initializr)
+        ══════════════════════════════════════ -->
+
+        <!-- BOM de AWS SDK — centraliza versiones de todos los módulos AWS -->
+        <!-- Se declara en <dependencyManagement> abajo, aquí solo los módulos -->
+
+        <!-- SES — envío de correos (verificación, recuperación, bienvenida) -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>ses</artifactId>
+        </dependency>
+
+        <!-- S3 — archivos adjuntos en v2, preparado desde v1 -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+        </dependency>
+
+        <!-- Secrets Manager — credenciales de BD y claves JWT en AWS -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>secretsmanager</artifactId>
+        </dependency>
+
+        <!-- ══════════════════════════════════════
+             MAPSTRUCT — Entity ↔ DTO mapper
+             (no está en Initializr)
+        ══════════════════════════════════════ -->
+
+        <dependency>
+            <groupId>org.mapstruct</groupId>
+            <artifactId>mapstruct</artifactId>
+            <version>${mapstruct.version}</version>
+        </dependency>
+
+        <!-- ══════════════════════════════════════
+             MÉTRICAS — Prometheus
+        ══════════════════════════════════════ -->
+
+        <!-- Expone /actuator/prometheus para que Prometheus lo scrapee -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
+
+        <!-- ══════════════════════════════════════
+             UTILIDADES DE DESARROLLO
+        ══════════════════════════════════════ -->
+
+        <!-- Lombok — @Getter, @Builder, @Slf4j, etc. -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- DevTools — hot reload en desarrollo -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-devtools</artifactId>
+            <scope>runtime</scope>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- ══════════════════════════════════════
+             TESTING
+        ══════════════════════════════════════ -->
+
+        <!-- JUnit 5 + Mockito + Spring Test — incluido por defecto -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Spring Security Test — para testear endpoints protegidos -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Testcontainers — PostgreSQL real en tests de integración -->
+        <!-- Fundamental para probar Stored Procedures contra BD real -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>${testcontainers.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+            <version>${testcontainers.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- REST Assured — tests de endpoints HTTP automatizados -->
+        <dependency>
+            <groupId>io.rest-assured</groupId>
+            <artifactId>rest-assured</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- REST Assured — tests de endpoints HTTP automatizados -->
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+        </dependency>
+
+
+    </dependencies>
+
+    <!-- ─────────────────────────────────────────
+         DEPENDENCY MANAGEMENT
+         AWS SDK usa BOM para centralizar versiones
+    ───────────────────────────────────────── -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>software.amazon.awssdk</groupId>
+                <artifactId>bom</artifactId>
+                <version>${aws.sdk.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <!-- ─────────────────────────────────────────
+         BUILD — Plugins
+    ───────────────────────────────────────── -->
+    <build>
+        <plugins>
+
+            <!-- Spring Boot Maven Plugin — genera el fat JAR ejecutable -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <!-- Excluir Lombok del JAR final — solo es para compilación -->
+                    <excludes>
+                        <exclude>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+
+            <!-- Maven Compiler — configura procesadores de anotaciones -->
+            <!-- Lombok y MapStruct deben declararse en orden específico -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <source>${java.version}</source>
+                    <target>${java.version}</target>
+                    <annotationProcessorPaths>
+                        <!-- 1. Lombok primero — genera getters/setters que MapStruct necesita -->
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>${lombok.version}</version>
+                        </path>
+                        <!-- 2. Binding entre Lombok y MapStruct -->
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok-mapstruct-binding</artifactId>
+                            <version>${lombok-mapstruct-binding.version}</version>
+                        </path>
+                        <!-- 3. MapStruct después — usa los getters que generó Lombok -->
+                        <path>
+                            <groupId>org.mapstruct</groupId>
+                            <artifactId>mapstruct-processor</artifactId>
+                            <version>${mapstruct.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+
+            <!-- Jacoco — genera reporte de cobertura para SonarCloud -->
+            <!-- No necesitas cambiar nada aquí para SonarCloud en el pipeline -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>${jacoco.version}</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>report</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+        </plugins>
+    </build>
+
+</project>
