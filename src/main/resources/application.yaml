@@ -1,0 +1,11 @@
+spring:
+  application:
+    name: taskflow-backend
+  jpa:
+    hibernate:
+      ddl-auto: none
+    open-in-view: false
+  flyway:
+    enabled: false
+server:
+  port: 8080
