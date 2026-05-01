@@ -3,3 +3,5 @@ spring:
     url: jdbc:postgresql://localhost:5432/taskflow
     username: taskflow_user
     password: taskflow_pass
+  flyway:
+    database: postgresql

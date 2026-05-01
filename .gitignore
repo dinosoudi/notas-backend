@@ -1,10 +1,34 @@
+## Spring Boot
 HELP.md
 target/
-.mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
 
-### STS ###
+## Maven wrapper jar (no committear el binario)
+.mvn/wrapper/maven-wrapper.jar
+
+## ─────────────────────────────────────────────
+## SECRETOS Y VARIABLES DE ENTORNO
+## NUNCA deben ir al repositorio
+## ─────────────────────────────────────────────
+.env
+*.env
+!.env.example
+
+## ─────────────────────────────────────────────
+## IntelliJ IDEA
+## ─────────────────────────────────────────────
+.idea/
+*.iws
+*.iml
+*.ipr
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/shelf/
+
+## ─────────────────────────────────────────────
+## STS / Eclipse
+## ─────────────────────────────────────────────
 .apt_generated
 .classpath
 .factorypath
@@ -13,13 +37,9 @@ target/
 .springBeans
 .sts4-cache
 
-### IntelliJ IDEA ###
-.idea
-*.iws
-*.iml
-*.ipr
-
-### NetBeans ###
+## ─────────────────────────────────────────────
+## NetBeans
+## ─────────────────────────────────────────────
 /nbproject/private/
 /nbbuild/
 /dist/
@@ -29,5 +49,33 @@ build/
 !**/src/main/**/build/
 !**/src/test/**/build/
 
-### VS Code ###
+## ─────────────────────────────────────────────
+## VS Code
+## ─────────────────────────────────────────────
 .vscode/
+
+## ─────────────────────────────────────────────
+## Sistema operativo
+## ─────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+## ─────────────────────────────────────────────
+## Logs
+## ─────────────────────────────────────────────
+*.log
+logs/
+spring.log
+
+## ─────────────────────────────────────────────
+## JaCoCo — cobertura de tests
+## ─────────────────────────────────────────────
+jacoco.exec
+jacoco/
+
+## ─────────────────────────────────────────────
+## Docker
+## ─────────────────────────────────────────────
+docker-compose.override.yml
