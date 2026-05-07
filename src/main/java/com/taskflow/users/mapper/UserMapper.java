@@ -69,6 +69,8 @@ public interface UserMapper {
     @Mapping(target = "tags", ignore = true)
     @Mapping(target = "notes", ignore = true)
     @Mapping(target = "refreshTokens", ignore = true)
+    @Mapping(target = "resetToken", ignore = true)
+    @Mapping(target = "resetTokenExpires", ignore = true)
     User toEntity(com.taskflow.auth.dto.RegisterRequest request);
 
     /**
@@ -96,6 +98,8 @@ public interface UserMapper {
     @Mapping(target = "tags", ignore = true)
     @Mapping(target = "notes", ignore = true)
     @Mapping(target = "refreshTokens", ignore = true)
+    @Mapping(target = "resetToken", ignore = true)
+    @Mapping(target = "resetTokenExpires", ignore = true)
     void updateEntityFromRequest(
             com.taskflow.users.dto.UpdateNameRequest request,
             @MappingTarget User user

@@ -38,6 +38,8 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     // Buscar por token de reset de contraseña
     Optional<User> findByResetCode(String resetCode);
 
+    Optional<User> findByResetToken(String resetToken);
+
     // ─── Queries con JPQL ─────────────────────────────────────
     // JPQL usa nombres de entidades y campos Java, no tablas y columnas SQL
 

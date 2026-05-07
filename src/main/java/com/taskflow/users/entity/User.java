@@ -83,6 +83,13 @@ public class User {
     @Column(name = "verification_expires")
     private LocalDateTime verificationExpires;
 
+    // ─── Reset token (paso 2→3 del flujo de recuperación) ────
+    @Column(name = "reset_token", length = 255)
+    private String resetToken;
+
+    @Column(name = "reset_token_expires")
+    private LocalDateTime resetTokenExpires;
+
     // ─── Preferencias de UI ───────────────────────────────────
     // JSONB en PostgreSQL — flexible para agregar campos sin migraciones
     @JdbcTypeCode(SqlTypes.JSON)
