@@ -71,16 +71,20 @@ public interface TagRepository extends JpaRepository<Tag, UUID> {
             @Param("userId") UUID userId
     );
 
-    // ─── Queries nativas — para el SP ─────────────────────────
-
-    // Llama al stored procedure sp_delete_tag_cascade
-    // El SP borra el tag y desvincula sus notas en una sola transacción
+    //Eliminar tags y desvincular notas:
     @Modifying
-    @Query(value = """
-        CALL sp_delete_tag_cascade(:tagId, :userId, NULL)
-        """, nativeQuery = true)
-    void deleteTagCascade(
-            @Param("tagId") UUID tagId,
-            @Param("userId") UUID userId
-    );
+    @Query("""
+    UPDATE Note n SET n.tag = NULL
+    WHERE n.tag.id = :tagId
+    """)
+    void detachNotesByTagId(@Param("tagId") UUID tagId);
+
+    @Modifying
+    @Query("""
+    DELETE FROM Tag t
+    WHERE t.id = :tagId AND t.user.id = :userId
+    """)
+    void deleteByIdAndUserId(@Param("tagId") UUID tagId, @Param("userId") UUID userId);
+
+
 }

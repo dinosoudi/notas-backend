@@ -1,11 +1,11 @@
 package com.taskflow.shared.security;
 
+import com.taskflow.shared.config.JwtConfig;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import javax.crypto.SecretKey;
@@ -13,39 +13,24 @@ import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.UUID;
 
-/**
- * Servicio para generar y validar JWT access tokens.
- *
- * Claims incluidos en el token:
- * - sub: userId (UUID del usuario)
- * - iat: fecha de emisión
- * - exp: fecha de expiración
- *
- * Sin roles en v1 — se agregan en v2 si se implementa admin.
- *
- * La clave secreta viene de application.yaml → JWT_SECRET en AWS.
- * Mínimo 64 caracteres para HS256.
- */
 @Service
 @Slf4j
 public class JwtService {
 
     private final SecretKey secretKey;
-    private final Long accessTokenExpirationMs;
+    private final JwtConfig jwtConfig;
 
-    public JwtService(
-            @Value("${jwt.secret}") String secret,
-            @Value("${jwt.access-expiration-ms:86400000}") Long accessTokenExpirationMs) {
-
-        this.secretKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
-        this.accessTokenExpirationMs = accessTokenExpirationMs;
+    public JwtService(JwtConfig jwtConfig) {
+        this.jwtConfig = jwtConfig;
+        this.secretKey = Keys.hmacShaKeyFor(
+                jwtConfig.getSecret().getBytes(StandardCharsets.UTF_8));
     }
 
     // ─── Generar access token ─────────────────────────────────
 
     public String generateAccessToken(UUID userId) {
         Date now = new Date();
-        Date expiration = new Date(now.getTime() + accessTokenExpirationMs);
+        Date expiration = new Date(now.getTime() + jwtConfig.getAccessExpirationMs());
 
         return Jwts.builder()
                 .subject(userId.toString())
@@ -68,8 +53,7 @@ public class JwtService {
     }
 
     public UUID extractUserId(String token) {
-        String subject = getClaims(token).getSubject();
-        return UUID.fromString(subject);
+        return UUID.fromString(getClaims(token).getSubject());
     }
 
     public Date extractExpiration(String token) {
@@ -84,15 +68,14 @@ public class JwtService {
         }
     }
 
-    // ─── Información de expiración ────────────────────────────
+    // ─── Helpers para TokensDTO ───────────────────────────────
 
-    public Long getAccessTokenExpirationMs() {
-        return accessTokenExpirationMs;
+    public Long getAccessTokenExpiresIn() {
+        return jwtConfig.getAccessExpiresInSeconds();
     }
 
-    // Devuelve los segundos hasta expiración — para el TokensDTO
-    public Long getAccessTokenExpiresIn() {
-        return accessTokenExpirationMs / 1000;
+    public Long getRefreshWebExpiresIn() {
+        return jwtConfig.getRefreshWebExpiresInSeconds();
     }
 
     // ─── Helper privado ───────────────────────────────────────

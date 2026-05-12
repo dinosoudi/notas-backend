@@ -43,9 +43,6 @@ public class AuthService {
     private final AuthMapper authMapper;
     private final EmailService emailService;
 
-    @Value("${jwt.refresh-expiration-ms-web:604800000}")
-    private Long refreshExpirationMsWeb;
-
     // Máximo intentos de login antes de bloquear
     private static final int MAX_LOGIN_ATTEMPTS = 5;
     private static final int RESET_CODE_EXPIRY_MINUTES = 10;
@@ -344,7 +341,7 @@ public class AuthService {
         RefreshToken newRefreshToken = RefreshToken.builder()
                 .user(user)
                 .tokenHash(newRefreshHash)
-                .expiresAt(LocalDateTime.now().plusSeconds(refreshExpirationMsWeb / 1000))
+                .expiresAt(LocalDateTime.now().plusSeconds(jwtService.getRefreshWebExpiresIn()))
                 .build();
 
         refreshTokenRepository.save(newRefreshToken);
@@ -353,7 +350,7 @@ public class AuthService {
                 newAccessToken,
                 newRawRefreshToken,
                 jwtService.getAccessTokenExpiresIn(),
-                refreshExpirationMsWeb / 1000
+                jwtService.getRefreshWebExpiresIn()
         );
     }
 
@@ -382,7 +379,7 @@ public class AuthService {
         RefreshToken refreshToken = RefreshToken.builder()
                 .user(user)
                 .tokenHash(refreshHash)
-                .expiresAt(LocalDateTime.now().plusSeconds(refreshExpirationMsWeb / 1000))
+                .expiresAt(LocalDateTime.now().plusSeconds(jwtService.getRefreshWebExpiresIn()))
                 .build();
 
         refreshTokenRepository.save(refreshToken);
@@ -391,7 +388,7 @@ public class AuthService {
                 accessToken,
                 rawRefreshToken,
                 jwtService.getAccessTokenExpiresIn(),
-                refreshExpirationMsWeb / 1000
+                jwtService.getRefreshWebExpiresIn()
         );
     }
 

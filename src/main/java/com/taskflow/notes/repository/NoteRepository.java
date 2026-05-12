@@ -30,21 +30,37 @@ public interface NoteRepository extends JpaRepository<Note, UUID> {
 
     // GET /notes — todas las notas del usuario paginadas
     // Pageable recibe page, size y sort desde el Controller
-    @Query("""
+    // Por esto — JOIN FETCH trae el tag en la misma query:
+    @Query(
+            value = """
         SELECT n FROM Note n
+        LEFT JOIN FETCH n.tag
         WHERE n.user.id = :userId
-        """)
+        """,
+            countQuery = """
+        SELECT COUNT(n) FROM Note n
+        WHERE n.user.id = :userId
+        """
+    )
     Page<Note> findByUserId(
             @Param("userId") UUID userId,
             Pageable pageable
     );
 
     // GET /notes/tag/{tagId} — notas de un tag específico paginadas
-    @Query("""
+    @Query(
+            value = """
         SELECT n FROM Note n
+        LEFT JOIN FETCH n.tag
         WHERE n.user.id = :userId
           AND n.tag.id = :tagId
-        """)
+        """,
+            countQuery = """
+        SELECT COUNT(n) FROM Note n
+        WHERE n.user.id = :userId
+          AND n.tag.id = :tagId
+        """
+    )
     Page<Note> findByUserIdAndTagId(
             @Param("userId") UUID userId,
             @Param("tagId") UUID tagId,

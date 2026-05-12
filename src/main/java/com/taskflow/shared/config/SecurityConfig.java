@@ -1,4 +1,4 @@
-package com.taskflow.shared.security;
+package com.taskflow.shared.config;
 
 import com.taskflow.shared.security.JwtFilter;
 import lombok.RequiredArgsConstructor;
