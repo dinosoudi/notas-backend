@@ -1,0 +1,92 @@
+name: Deploy — Producción
+
+# Se ejecuta cuando se hace merge a prod (rama de producción)
+on:
+  push:
+    branches: [ prod ]
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: taskflow-backend
+  EKS_CLUSTER: taskflow-cluster
+  IMAGE_TAG: ${{ github.sha }}
+
+jobs:
+  deploy:
+    name: Build imagen y Deploy a EKS
+    runs-on: ubuntu-latest
+
+    # Permisos para que GitHub Actions pueda autenticarse con AWS via OIDC
+    # Más seguro que guardar access keys como secrets
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      # 1. Checkout
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 2. Configurar Java para compilar
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      # 3. Compilar el JAR (sin tests — ya pasaron en CI)
+      - name: Build JAR
+        run: ./mvnw clean package -DskipTests -q
+
+      # 4. Autenticarse con AWS via OIDC
+      # No necesitas guardar access keys — GitHub y AWS se autentican mutuamente
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # 5. Login a ECR (registro de imágenes Docker de AWS)
+      - name: Login to ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # 6. Build y push de la imagen Docker a ECR
+      - name: Build y Push imagen Docker
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+      # 7. Configurar kubectl para hablar con el cluster EKS
+      - name: Configure kubectl
+        run: |
+          aws eks update-kubeconfig \
+            --region ${{ env.AWS_REGION }} \
+            --name ${{ env.EKS_CLUSTER }}
+
+      # 8. Actualizar la imagen en el deployment de Kubernetes
+      # Kubernetes descarga la nueva imagen y hace rolling update automáticamente
+      - name: Deploy a EKS
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          kubectl set image deployment/taskflow-backend \
+            taskflow-backend=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            --namespace=default
+
+          # Esperar a que el rolling update termine
+          kubectl rollout status deployment/taskflow-backend \
+            --namespace=default \
+            --timeout=300s
+
+      # 9. Verificar que la app está healthy después del deploy
+      - name: Verificar deploy
+        run: |
+          kubectl get pods -l app=taskflow-backend --namespace=default
+          echo "✅ Deploy completado exitosamente"
