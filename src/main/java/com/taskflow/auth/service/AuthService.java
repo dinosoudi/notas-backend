@@ -42,6 +42,7 @@ public class AuthService {
     private final JwtService jwtService;
     private final AuthMapper authMapper;
     private final EmailService emailService;
+    private final SecureRandom random = new SecureRandom();
 
     // Máximo intentos de login antes de bloquear
     private static final int MAX_LOGIN_ATTEMPTS = 5;
@@ -393,7 +394,6 @@ public class AuthService {
     }
 
     private String generateSixDigitCode() {
-        SecureRandom random = new SecureRandom();
         int code = 100000 + random.nextInt(900000);
         return String.valueOf(code);
     }
