@@ -56,6 +56,7 @@ jobs:
           SPRING_PROFILES_ACTIVE: dev
         run: ./mvnw clean verify -q
 
+      # se me olvido poner aceptar en el token xd
       # 4. Análisis de SonarCloud
       # SONAR_TOKEN se configura en GitHub → Settings → Secrets
       - name: SonarCloud Analysis
