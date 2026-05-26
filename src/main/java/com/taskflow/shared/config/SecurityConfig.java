@@ -62,7 +62,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/auth/refresh").permitAll()
 
                         // ── Actuator — solo health público ─────────────────
-                        .requestMatchers("/actuator/health").permitAll()
+                        //.requestMatchers("/actuator/health").permitAll()
+                        .requestMatchers("/actuator/**").permitAll()
 
                         // ── Todo lo demás requiere JWT válido ──────────────
                         .anyRequest().authenticated()

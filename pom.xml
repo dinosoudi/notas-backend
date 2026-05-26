@@ -175,6 +175,16 @@
             <optional>true</optional>
         </dependency>
 
+
+        <!-- ══════════════════════════════════════
+             STS
+        ══════════════════════════════════════ -->
+
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>sts</artifactId>
+        </dependency>
+
         <!-- ══════════════════════════════════════
              TESTING
         ══════════════════════════════════════ -->

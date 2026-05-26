@@ -1,0 +1,133 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: taskflow-backend
+  namespace: default
+  labels:
+    app: taskflow-backend
+    version: "1.0"
+spec:
+  # 2 réplicas — si un pod cae, el otro sigue respondiendo
+  replicas: 2
+
+  selector:
+    matchLabels:
+      app: taskflow-backend
+
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # Durante el deploy: máximo 1 pod extra corriendo
+      maxSurge: 1
+      # Durante el deploy: máximo 0 pods no disponibles
+      # Garantiza que siempre haya al menos 2 pods activos
+      maxUnavailable: 0
+
+  template:
+    metadata:
+      labels:
+        app: taskflow-backend
+    spec:
+      # El pod usa este ServiceAccount que tiene el rol IAM de AWS
+      # Así AWS SDK puede autenticarse sin access keys
+      serviceAccountName: taskflow-backend-sa
+
+      containers:
+        - name: taskflow-backend
+          # La imagen se actualiza en el pipeline con kubectl set image
+          image: 302263061868.dkr.ecr.us-east-1.amazonaws.com/taskflow-backend:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+              name: http
+
+          # Variables de entorno — vienen de Secrets y ConfigMaps de Kubernetes
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: "prod"
+            - name: DB_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: taskflow-secrets
+                  key: db-host
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: taskflow-secrets
+                  key: db-name
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: taskflow-secrets
+                  key: db-user
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: taskflow-secrets
+                  key: db-password
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: taskflow-secrets
+                  key: jwt-secret
+            - name: AWS_REGION
+              valueFrom:
+                configMapKeyRef:
+                  name: taskflow-config
+                  key: aws-region
+            - name: AWS_SES_FROM_EMAIL
+              valueFrom:
+                configMapKeyRef:
+                  name: taskflow-config
+                  key: ses-from-email
+            - name: AWS_S3_BUCKET
+              valueFrom:
+                configMapKeyRef:
+                  name: taskflow-config
+                  key: s3-bucket
+            - name: APP_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: taskflow-config
+                  key: app-url
+            - name: JAVA_OPTS
+              value: "-Xms256m -Xmx512m -XX:+UseContainerSupport"
+
+          # Recursos — límites para que un pod no consuma todo el nodo
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+
+          # (Esto le da a Spring Boot hasta 100 segundos —20 intentos cada 5 segundos— para arrancar en paz).
+          startupProbe:
+            httpGet:
+              path: /api/v1/actuator/health/liveness  # o /actuator/health, ambos funcionan
+              port: 8080
+            failureThreshold: 30
+            periodSeconds: 10
+
+          # Liveness probe — si falla, Kubernetes reinicia el pod
+          # Detecta si la app está viva pero colgada
+          livenessProbe:
+            httpGet:
+              path: /api/v1/actuator/health/liveness
+              port: 8080
+            periodSeconds: 20
+            failureThreshold: 3
+
+          # Readiness probe — si falla, Kubernetes deja de mandar tráfico al pod
+          # Detecta si la app está lista para recibir requests
+          readinessProbe:
+            httpGet:
+              path: /api/v1/actuator/health/readiness
+              port: 8080
+            periodSeconds: 10
+            failureThreshold: 3
+
+

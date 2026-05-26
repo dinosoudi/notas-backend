@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: taskflow-backend-svc
+  namespace: default
+  labels:
+    app: taskflow-backend
+spec:
+  # ClusterIP — solo accesible dentro del cluster
+  # El Ingress es el que expone al exterior
+  type: LoadBalancer
+  selector:
+    app: taskflow-backend
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+      protocol: TCP
