@@ -1,0 +1,19 @@
+aws_region   = "us-east-1"
+project_name = "taskflow"
+environment  = "prod"
+
+# RDS
+db_name     = "taskflow_db"
+db_username = "taskflow_user"
+db_password = "una-password-segura-aqui"
+
+# JWT — el mismo secret que ya tienes en tu .env
+jwt_secret = "tu-jwt-secret-aqui"
+
+# ECS
+app_port    = 8080
+task_cpu    = 512
+task_memory = 1024
+
+# Esta la llenarás después del primer push a ECR
+app_image = ""
