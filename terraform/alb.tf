@@ -1,7 +1,7 @@
 # Security group del ALB — acepta tráfico HTTP desde internet
 resource "aws_security_group" "alb" {
   name        = "${var.project_name}-alb-sg"
-  description = "Tráfico público al Load Balancer"
+  description = "Trafico publico al Load Balancer"
   vpc_id      = module.vpc.vpc_id
 
   ingress {
@@ -34,7 +34,7 @@ resource "aws_security_group" "alb" {
 # Security group de ECS — solo acepta tráfico desde el ALB
 resource "aws_security_group" "ecs_tasks" {
   name        = "${var.project_name}-ecs-sg"
-  description = "Tráfico al contenedor solo desde el ALB"
+  description = "Trafico al contenedor solo desde el ALB"
   vpc_id      = module.vpc.vpc_id
 
   ingress {
@@ -108,6 +108,6 @@ resource "aws_lb_listener" "http" {
 }
 
 output "alb_dns_name" {
-  description = "URL pública de tu aplicación"
+  description = "URL publica de tu aplicacion"
   value       = "http://${aws_lb.main.dns_name}"
 }

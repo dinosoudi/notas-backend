@@ -1,5 +1,5 @@
 variable "aws_region" {
-  description = "Región de AWS"
+  description = "Region de AWS"
   type        = string
   default     = "us-east-1"
 }
@@ -43,7 +43,7 @@ variable "app_port" {
 }
 
 variable "app_image" {
-  description = "URI de la imagen en ECR (se llena después del primer push)"
+  description = "URI de la imagen en ECR (se llena despues del primer push)"
   type        = string
   default     = ""
 }

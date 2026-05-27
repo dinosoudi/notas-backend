@@ -1,5 +1,6 @@
 resource "aws_ecr_repository" "app" {
   name                 = "${var.project_name}-backend"
+  force_delete = true
   image_tag_mutability = "MUTABLE"
 
   image_scanning_configuration {
@@ -20,7 +21,7 @@ resource "aws_ecr_lifecycle_policy" "app" {
   policy = jsonencode({
     rules = [{
       rulePriority = 1
-      description  = "Mantener solo las últimas 5 imágenes"
+      description  = "Mantener solo las ultimas 5 imagenes"
       selection = {
         tagStatus   = "any"
         countType   = "imageCountMoreThan"

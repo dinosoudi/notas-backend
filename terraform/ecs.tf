@@ -36,7 +36,7 @@ resource "aws_ecs_task_definition" "app" {
 
   container_definitions = jsonencode([{
     name      = "${var.project_name}-container"
-    image     = var.app_image
+    image     = "${aws_ecr_repository.app.repository_url}:latest"
     essential = true
 
     portMappings = [{
@@ -50,7 +50,7 @@ resource "aws_ecs_task_definition" "app" {
       { name = "DB_HOST",                value = split(":", aws_db_instance.postgres.endpoint)[0] },
       { name = "DB_PORT",                value = "5432" },
       { name = "DB_NAME",                value = var.db_name },
-      { name = "DB_USERNAME",            value = var.db_username },
+      { name = "DB_USER",                value = var.db_username },
       { name = "SERVER_PORT",            value = tostring(var.app_port) }
     ]
 

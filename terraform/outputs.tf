@@ -4,7 +4,7 @@ output "app_url" {
 }
 
 output "ecr_url" {
-  description = "URL del repositorio ECR para hacer push de imágenes"
+  description = "URL del repositorio ECR para hacer push de imagenes"
   value       = aws_ecr_repository.app.repository_url
 }
 
