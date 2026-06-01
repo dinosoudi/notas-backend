@@ -16,7 +16,6 @@ import org.springframework.security.core.userdetails.UserDetails;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 
@@ -187,6 +186,6 @@ class AuthControllerTest {
     }
 
     // Opcional: si quieres probar que el controlador no hace nada raro con excepciones,
-    // puedes verificar que el método delegue sin catch (la excepción se propagaría).
+    // Puedes verificar que el metodo delegue sin catch (la excepción se propagaría).
     // Pero eso se cubre mejor con tests de integración (MockMvc) o probando el @ControllerAdvice.
 }

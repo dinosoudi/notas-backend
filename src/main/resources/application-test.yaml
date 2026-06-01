@@ -1,0 +1,22 @@
+spring:
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    # url, username y password serán inyectados por @DynamicPropertySource
+
+  jpa:
+    hibernate:
+      ddl-auto: validate        # Mejor que 'none' para tests: valida que las entidades coincidan con el esquema
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    # La conexión la coge de spring.datasource que ya viene del contenedor
+
+debug: false
+logging:
+  level:
+    org.flywaydb: DEBUG   # útil para ver migraciones en tests
