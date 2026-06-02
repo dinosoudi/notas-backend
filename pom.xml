@@ -42,10 +42,8 @@
         <jacoco.version>0.8.12</jacoco.version>
 
         <!-- SonarCloud -->
-        <sonar.organization>tu-org-en-sonarcloud</sonar.organization>
-        <sonar.host.url>https://sonarcloud.io</sonar.host.url>
-        <!-- SonarCloud -->
-        <sonar.organization>tu-org-en-sonarcloud</sonar.organization>
+        <sonar.projectKey>dinosoudi_notas-backend</sonar.projectKey>
+        <sonar.organization>dinosoudi </sonar.organization>
         <sonar.host.url>https://sonarcloud.io</sonar.host.url>
         <sonar.coverage.exclusions>
             **/dto/**,
