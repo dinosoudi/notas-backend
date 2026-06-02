@@ -44,10 +44,24 @@
         <!-- SonarCloud -->
         <sonar.organization>tu-org-en-sonarcloud</sonar.organization>
         <sonar.host.url>https://sonarcloud.io</sonar.host.url>
+        <!-- SonarCloud -->
+        <sonar.organization>tu-org-en-sonarcloud</sonar.organization>
+        <sonar.host.url>https://sonarcloud.io</sonar.host.url>
+        <sonar.coverage.exclusions>
+            **/dto/**,
+            **/config/**,
+            **/*Application.java
+        </sonar.coverage.exclusions>
+        <sonar.exclusions>
+            **/dto/**,
+            **/*Application.java
+        </sonar.exclusions>
 
         <!-- Rest Assured -->
         <rest-assured.version>5.5.1</rest-assured.version>
     </properties>
+
+
 
     <dependencies>
 
