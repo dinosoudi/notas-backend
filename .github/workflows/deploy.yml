@@ -1,0 +1,108 @@
+name: Deploy — Producción
+
+on:
+  push:
+    branches: [ prod ]
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: taskflow-backend
+  ECS_CLUSTER: taskflow-cluster        # ← antes era EKS_CLUSTER
+  ECS_SERVICE: taskflow-service        # ← nuevo, no existía en EKS
+  CONTAINER_NAME: taskflow-container   # ← debe coincidir con el nombre en ecs.tf
+  IMAGE_TAG: ${{ github.sha }}
+
+jobs:
+  deploy:
+    name: Build imagen y Deploy a ECS
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      # 1. Checkout
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 2. Java para compilar
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      # 3. Build del JAR (sin tests — ya pasaron en CI)
+      - name: Build JAR
+        run: ./mvnw clean package -DskipTests -q
+
+      # 4. Autenticarse con AWS via OIDC (esto no cambia)
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # 5. Login a ECR (tampoco cambia)
+      - name: Login to ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # 6. Build y push de la imagen (igual que antes)
+      - name: Build y Push imagen Docker
+        id: build-image                  # ← necesita id para referenciar el output abajo
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker tag  $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+                      $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+      # 7. ← NUEVO — Descargar la Task Definition actual de ECS
+      # En EKS hacías kubectl set image directo
+      # En ECS el flujo es: bajar la task definition → modificar la imagen → registrar nueva versión → deployar
+      - name: Descargar Task Definition actual
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition taskflow-task \
+            --query taskDefinition \
+            --output json > task-definition.json
+          echo "✅ Task Definition descargada"
+
+      # 8. ← NUEVO — Inyectar la nueva imagen en la Task Definition
+      # La action amazon-ecs-render-task-definition reemplaza solo la imagen
+      # del contenedor que le indicas, sin tocar el resto de la configuración
+      - name: Actualizar imagen en Task Definition
+        id: render-task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-definition.json
+          container-name: ${{ env.CONTAINER_NAME }}
+          image: ${{ steps.build-image.outputs.image }}
+
+      # 9. ← NUEVO — Registrar la nueva Task Definition y hacer el deploy
+      # Equivalente al kubectl rollout en EKS
+      # wait-for-service-stability espera a que ECS confirme que el nuevo
+      # contenedor está healthy antes de marcar el deploy como exitoso
+      - name: Deploy a ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.render-task-def.outputs.task-definition }}
+          service: ${{ env.ECS_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true   # equivalente al kubectl rollout status
+
+      # 10. Verificar que el servicio quedó healthy
+      - name: Verificar deploy
+        run: |
+          aws ecs describe-services \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --services ${{ env.ECS_SERVICE }} \
+            --query 'services[0].{Status:status, Running:runningCount, Desired:desiredCount}' \
+            --output table
+          echo "✅ Deploy completado exitosamente"

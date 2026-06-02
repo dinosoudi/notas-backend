@@ -1,0 +1,46 @@
+# ─────────────────────────────────────────────
+# ConfigMap — variables NO sensibles
+# Valores que pueden vivir en el repositorio
+# ─────────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: taskflow-config
+  namespace: default
+data:
+  aws-region: "us-east-1"
+  ses-from-email: "noreply@taskflow.com"
+  s3-bucket: "taskflow-uploads"
+  app-url: "https://taskflow.com"
+
+---
+
+# ─────────────────────────────────────────────
+# Secret — variables SENSIBLES
+# NUNCA commitear con valores reales
+# En producción se crean con kubectl o desde AWS Secrets Manager
+#
+# Para crear desde terminal:
+# kubectl create secret generic taskflow-secrets \
+#   --from-literal=db-host=tu-rds-endpoint \
+#   --from-literal=db-name=taskflow \
+#   --from-literal=db-user=taskflow_user \
+#   --from-literal=db-password=tu-password \
+#   --from-literal=jwt-secret=tu-jwt-secret
+# ─────────────────────────────────────────────
+
+---
+
+# ─────────────────────────────────────────────
+# ServiceAccount — identidad del pod en AWS
+# Se vincula a un rol IAM con permisos para SES, S3, Secrets Manager
+# Así los pods no necesitan access keys
+# ─────────────────────────────────────────────
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: taskflow-backend-sa
+  namespace: default
+  annotations:
+    # ARN del rol IAM que tiene permisos para SES, S3, Secrets Manager
+    eks.amazonaws.com/role-arn: arn:aws:iam::302263061868:role/taskflow-backend-role

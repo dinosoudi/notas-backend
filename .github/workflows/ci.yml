@@ -1,0 +1,78 @@
+name: CI — Build y Tests
+
+# Se ejecuta en cada PR hacia develop y en cada push a develop
+on:
+  pull_request:
+    branches: [ develop ]
+  push:
+    branches: [ develop ]
+
+jobs:
+  build-and-test:
+    name: Build, Test y SonarCloud
+    runs-on: ubuntu-latest
+
+    # PostgreSQL como servicio para los tests de integración (Testcontainers)
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: taskflow_test
+          POSTGRES_USER: taskflow_user
+          POSTGRES_PASSWORD: taskflow_pass
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      # 1. Checkout del código
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # SonarCloud necesita el historial completo
+
+      # 2. Configurar Java 21
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven  # cachea ~/.m2 entre runs
+
+      # 3. Compilar y correr tests
+      # Jacoco genera el reporte de cobertura que SonarCloud consume
+      - name: Build y Tests
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: taskflow_test
+          DB_USER: taskflow_user
+          DB_PASSWORD: taskflow_pass
+          JWT_SECRET: test-secret-key-for-ci-at-least-64-characters-long-here-ok
+          SPRING_PROFILES_ACTIVE: dev
+        run: ./mvnw clean verify -q
+
+      # se me olvido poner aceptar en el token xd
+      # 4. Análisis de SonarCloud
+      # SONAR_TOKEN se configura en GitHub → Settings → Secrets
+      - name: SonarCloud Analysis
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ./mvnw sonar:sonar \
+            -Dsonar.token=${{ secrets.SONAR_TOKEN }}
+
+      # 5. Publicar reporte de cobertura como comentario en el PR
+      - name: Coverage Report
+        uses: madrapps/jacoco-report@v1.6.1
+        if: github.event_name == 'pull_request'
+        with:
+          paths: ${{ github.workspace }}/target/site/jacoco/jacoco.xml
+          token: ${{ secrets.GITHUB_TOKEN }}
+          min-coverage-overall: 70
+          min-coverage-changed-files: 80

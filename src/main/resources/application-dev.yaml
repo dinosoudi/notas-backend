@@ -1,0 +1,11 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/taskflow
+    username: taskflow_user
+    password: taskflow_pass
+  flyway:
+    database: postgresql
+jwt:
+  secret: ${JWT_SECRET:desarrollo-local-clave-segura-de-al-menos-64-caracteres-aqui}
+  access-expiration-ms: ${JWT_ACCESS_EXPIRATION_MS:86400000}
+  refresh-expiration-ms-web: ${JWT_REFRESH_EXPIRATION_MS_WEB:604800000}
