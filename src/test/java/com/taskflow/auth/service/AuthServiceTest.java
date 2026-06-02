@@ -408,4 +408,242 @@ class AuthServiceTest {
         when(authMapper.toTokensDTO(eq("access"), anyString(), eq(900L), eq(604800L)))
                 .thenReturn(tokensDTO);
     }
+
+    @Nested
+    @DisplayName("verifyResetCode")
+    class VerifyResetCode {
+
+        @Test
+        @DisplayName("Debe verificar código correctamente y devolver resetToken")
+        void shouldVerifyCodeAndReturnResetToken() {
+            User user = buildVerifiedUser();
+            user.setResetCode("hashedCode");
+            user.setResetCodeExpires(LocalDateTime.now().plusMinutes(10));
+            user.setResetAttempts(1); // menos del máximo
+
+            when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(user));
+            when(passwordEncoder.matches("123456", "hashedCode")).thenReturn(true);
+
+            VerifyResetCodeRequest request = new VerifyResetCodeRequest();
+            request.setEmail("test@example.com");
+            request.setCode("123456");
+
+            VerifyResetCodeResponse expected = new VerifyResetCodeResponse();
+            when(authMapper.toVerifyResetCodeResponse(anyString(), anyString(), anyInt()))
+                    .thenReturn(expected);
+
+            VerifyResetCodeResponse response = authService.verifyResetCode(request);
+
+            assertThat(response).isSameAs(expected);
+            assertThat(user.getResetAttempts()).isZero();
+            assertThat(user.getResetToken()).isNotNull();
+            assertThat(user.getResetTokenExpires()).isNotNull();
+            then(userRepository).should().save(user);
+        }
+
+        @Test
+        @DisplayName("Debe lanzar Unauthorized si el email no existe")
+        void shouldThrowIfEmailNotFound() {
+            when(userRepository.findByEmail("no@existe.com")).thenReturn(Optional.empty());
+            VerifyResetCodeRequest request = new VerifyResetCodeRequest();
+            request.setEmail("no@existe.com");
+            assertThatThrownBy(() -> authService.verifyResetCode(request))
+                    .isInstanceOf(UnauthorizedException.class);
+        }
+
+        @Test
+        @DisplayName("Debe lanzar Unauthorized si el código ha expirado")
+        void shouldThrowIfCodeExpired() {
+            User user = buildVerifiedUser();
+            user.setResetCode("hashed");
+            user.setResetCodeExpires(LocalDateTime.now().minusMinutes(1));
+            when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(user));
+
+            VerifyResetCodeRequest request = new VerifyResetCodeRequest();
+            request.setEmail("test@example.com");
+            request.setCode("123456");
+
+            assertThatThrownBy(() -> authService.verifyResetCode(request))
+                    .isInstanceOf(UnauthorizedException.class)
+                    .hasMessageContaining("expirado");
+        }
+
+        @Test
+        @DisplayName("Debe lanzar TooManyRequests si excede intentos máximos")
+        void shouldThrowTooManyRequestsIfMaxAttemptsReached() {
+            User user = buildVerifiedUser();
+            user.setResetAttempts(5); // maxAttempts = 5 en el código
+            user.setResetCode("hashed");
+            user.setResetCodeExpires(LocalDateTime.now().plusMinutes(10));
+            when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(user));
+
+            VerifyResetCodeRequest request = new VerifyResetCodeRequest();
+            request.setEmail("test@example.com");
+            request.setCode("123456");
+
+            assertThatThrownBy(() -> authService.verifyResetCode(request))
+                    .isInstanceOf(TooManyRequestsException.class);
+            then(userRepository).should().clearResetCode(user.getId());
+        }
+
+
+    }
+
+    @Nested
+    @DisplayName("resetPassword")
+    class ResetPassword {
+
+        @Test
+        @DisplayName("Debe lanzar BadRequest si las contraseñas no coinciden")
+        void shouldThrowIfPasswordsMismatch() {
+            ResetPasswordRequest request = new ResetPasswordRequest();
+            request.setNewPassword("pass1");
+            request.setConfirmPassword("pass2");
+            assertThatThrownBy(() -> authService.resetPassword(request))
+                    .isInstanceOf(BadRequestException.class);
+        }
+
+        @Test
+        @DisplayName("Debe lanzar Unauthorized si resetToken no existe")
+        void shouldThrowIfResetTokenNotFound() {
+            when(userRepository.findByResetToken("invalid")).thenReturn(Optional.empty());
+            ResetPasswordRequest request = new ResetPasswordRequest();
+            request.setResetToken("invalid");
+            request.setNewPassword("pass");
+            request.setConfirmPassword("pass");
+            assertThatThrownBy(() -> authService.resetPassword(request))
+                    .isInstanceOf(UnauthorizedException.class);
+        }
+
+        @Test
+        @DisplayName("Debe lanzar Unauthorized si resetToken expiró")
+        void shouldThrowIfResetTokenExpired() {
+            User user = buildVerifiedUser();
+            user.setResetToken("expired");
+            user.setResetTokenExpires(LocalDateTime.now().minusMinutes(1));
+            when(userRepository.findByResetToken("expired")).thenReturn(Optional.of(user));
+
+            ResetPasswordRequest request = new ResetPasswordRequest();
+            request.setResetToken("expired");
+            request.setNewPassword("pass");
+            request.setConfirmPassword("pass");
+            assertThatThrownBy(() -> authService.resetPassword(request))
+                    .isInstanceOf(UnauthorizedException.class);
+        }
+
+        @Test
+        @DisplayName("Debe lanzar BadRequest si nueva contraseña es igual a la anterior")
+        void shouldThrowIfNewPasswordSameAsOld() {
+            User user = buildVerifiedUser();
+            user.setResetToken("token");
+            user.setResetTokenExpires(LocalDateTime.now().plusMinutes(15));
+            user.setPasswordHash("oldHash");
+            when(userRepository.findByResetToken("token")).thenReturn(Optional.of(user));
+            when(passwordEncoder.matches("samePass", "oldHash")).thenReturn(true);
+
+            ResetPasswordRequest request = new ResetPasswordRequest();
+            request.setResetToken("token");
+            request.setNewPassword("samePass");
+            request.setConfirmPassword("samePass");
+
+            assertThatThrownBy(() -> authService.resetPassword(request))
+                    .isInstanceOf(BadRequestException.class);
+        }
+    }
+
+
+    @Nested
+    @DisplayName("logout")
+    class Logout {
+
+        @Test
+        @DisplayName("Debe eliminar el refresh token de la base de datos")
+        void shouldDeleteRefreshToken() {
+            String rawToken = "refresh-token";
+            when(passwordEncoder.encode(rawToken)).thenReturn("hashedToken");
+
+            authService.logout(rawToken);
+
+            then(refreshTokenRepository).should().deleteByTokenHash("hashedToken");
+        }
+    }
+
+    @Nested
+    @DisplayName("logoutAll")
+    class LogoutAll {
+
+        @Test
+        @DisplayName("Debe eliminar todos los tokens del usuario y devolver cantidad")
+        void shouldDeleteAllTokensAndReturnCount() {
+            UUID userId = UUID.randomUUID();
+            when(refreshTokenRepository.countByUserId(userId)).thenReturn(5L);
+
+            int count = authService.logoutAll(userId);
+
+            assertThat(count).isEqualTo(5);
+            then(refreshTokenRepository).should().deleteAllByUserId(userId);
+        }
+    }
+
+    @Nested
+    @DisplayName("resendVerification")
+    class ResendVerification {
+
+        @Test
+        @DisplayName("Debe reenviar token de verificación si el usuario existe y no está verificado")
+        void shouldResendTokenIfUserExistsAndNotVerified() {
+            User user = buildBasicUser(); // emailVerified = false
+            user.setEmail("test@example.com");
+            when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(user));
+
+            authService.resendVerification("test@example.com");
+
+            assertThat(user.getVerificationToken()).isNotNull();
+            assertThat(user.getVerificationExpires()).isNotNull();
+            then(userRepository).should().save(user);
+            then(emailService).should().resendVerificationEmail(eq("test@example.com"), eq(user.getName()), anyString());
+        }
+
+        @Test
+        @DisplayName("No debe hacer nada si el usuario no existe (respuesta silenciosa)")
+        void shouldDoNothingIfUserNotFound() {
+            when(userRepository.findByEmail("no@existe.com")).thenReturn(Optional.empty());
+
+            authService.resendVerification("no@existe.com");
+
+            then(userRepository).shouldHaveNoMoreInteractions();
+            then(emailService).shouldHaveNoInteractions();
+        }
+
+        @Test
+        @DisplayName("No debe hacer nada si el usuario ya está verificado")
+        void shouldDoNothingIfAlreadyVerified() {
+            User user = buildVerifiedUser();
+            user.setEmail("verified@example.com");
+            when(userRepository.findByEmail("verified@example.com")).thenReturn(Optional.of(user));
+
+            authService.resendVerification("verified@example.com");
+
+            then(userRepository).should(never()).save(any());
+            then(emailService).shouldHaveNoInteractions();
+        }
+    }
+
+    @Test
+    @DisplayName("Debe lanzar Unauthorized si la cuenta está eliminada")
+    void shouldThrowIfAccountDeleted() {
+        User user = buildVerifiedUser();
+        user.setDeletedAt(LocalDateTime.now());
+        when(userRepository.findByEmail("deleted@user.com")).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches(anyString(), anyString())).thenReturn(true);
+
+        LoginRequest request = new LoginRequest();
+        request.setIdentifier("deleted@user.com");
+        request.setPassword("pass");
+
+        assertThatThrownBy(() -> authService.login(request))
+                .isInstanceOf(UnauthorizedException.class)
+                .hasMessageContaining("eliminación");
+    }
 }
+
