@@ -72,10 +72,10 @@ server:
 # ─────────────────────────────────────────────
 logging:
   level:
-    root: WARN
-    com.taskflow: INFO
+    root: INFO
+    com.taskflow: DEBUG
     org.flywaydb: INFO
-    org.springframework.security: WARN
+    org.springframework.security: DEBUG
     org.hibernate: WARN
   pattern:
     console: '{"time":"%d{yyyy-MM-dd HH:mm:ss}","level":"%level","logger":"%logger{36}","msg":"%msg"}%n'

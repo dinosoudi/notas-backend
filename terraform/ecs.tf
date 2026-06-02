@@ -76,11 +76,11 @@ resource "aws_ecs_task_definition" "app" {
 
     # Healthcheck a nivel contenedor (además del del ALB)
     healthCheck = {
-      command     = ["CMD-SHELL", "curl -f http://localhost:${var.app_port}/actuator/health || exit 1"]
+      command     = ["CMD-SHELL", "curl -f http://localhost:${var.app_port}/api/v1/actuator/health || exit 1"]
       interval    = 30
       timeout     = 5
       retries     = 3
-      startPeriod = 90  # Spring Boot necesita ~30-60s para arrancar
+      startPeriod = 60  # Spring Boot necesita ~30-60s para arrancar
     }
   }])
 
