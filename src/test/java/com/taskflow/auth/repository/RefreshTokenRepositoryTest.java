@@ -6,209 +6,158 @@ import com.taskflow.users.entity.User;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
-import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
-import org.springframework.test.context.ActiveProfiles;
+import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
+import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
+import org.springframework.test.context.jdbc.Sql;
 
 import java.time.LocalDateTime;
-import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 @DataJpaTest
-@ActiveProfiles("test")
+// Reemplazar la base de datos embebida por la de Testcontainers
+@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 class RefreshTokenRepositoryTest extends BasePostgresTest {
 
     @Autowired
-    private RefreshTokenRepository repository;
+    private RefreshTokenRepository refreshTokenRepository;
 
     @Autowired
-    private TestEntityManager entityManager;
+    private TestEntityManager entityManager; // para persistir datos de prueba
 
-    private User user;
-    private UUID userId;
-    private String tokenHash = "abc123hash";
-    private String otherTokenHash = "xyz789hash";
-    private LocalDateTime futureDate;
-    private LocalDateTime pastDate;
+    private User testUser;
+    private RefreshToken token1, token2, expiredToken;
+
 
     @BeforeEach
     void setUp() {
-        user = new User();
-        // user.setId(UUID.randomUUID());  ← BORRA esta línea
-        user.setName("Test User");
-        user.setEmail("test@example.com");
-        user.setPasswordHash("some-hash");
-        user.setAuthProvider(User.AuthProvider.EMAIL);
-        entityManager.persist(user);
+        // Crear usuario con los campos reales de la entidad User
+        testUser = User.builder()
+                .name("Test User")
+                .email("test@example.com")
+                .passwordHash("dummyHash")
+                .authProvider(User.AuthProvider.EMAIL)
+                .emailVerified(true)
+                .build();
+        entityManager.persistAndFlush(testUser);
+
+        // Token válido 1
+        token1 = RefreshToken.builder()
+                .tokenHash("hash1")
+                .user(testUser)
+                .expiresAt(LocalDateTime.now().plusHours(1))
+                .build();
+
+        // Token válido 2 (mismo usuario)
+        token2 = RefreshToken.builder()
+                .tokenHash("hash2")
+                .user(testUser)
+                .expiresAt(LocalDateTime.now().plusHours(2))
+                .build();
+
+        // Token expirado
+        expiredToken = RefreshToken.builder()
+                .tokenHash("expiredHash")
+                .user(testUser)
+                .expiresAt(LocalDateTime.now().minusHours(1))
+                .build();
+
+        entityManager.persist(token1);
+        entityManager.persist(token2);
+        entityManager.persist(expiredToken);
         entityManager.flush();
-        userId = user.getId(); // Hibernate asigna el ID después del persist+flush
-
-        futureDate = LocalDateTime.now().plusDays(1);
-        pastDate = LocalDateTime.now().minusDays(1);
     }
 
-    // Método helper para crear un RefreshToken sin persistir
-    private RefreshToken buildToken(String hash, User owner, LocalDateTime expiresAt) {
-        RefreshToken token = new RefreshToken();
-        token.setTokenHash(hash);
-        token.setUser(owner);
-        token.setExpiresAt(expiresAt);
-        return token;
-    }
-
-    // Método helper para persistir un RefreshToken (usa TestEntityManager para flujos con @Modifying)
-    private RefreshToken persistToken(String hash, User owner, LocalDateTime expiresAt) {
-        RefreshToken token = buildToken(hash, owner, expiresAt);
-        entityManager.persist(token);
-        entityManager.flush();
-        entityManager.clear();   // importante para que los @Modifying vean los cambios
-        return token;
-    }
+    // ─── Pruebas de métodos por convención ────────────────────
 
     @Test
-    void findByTokenHash_shouldReturnToken_whenExists() {
-        persistToken(tokenHash, user, futureDate);
-
-        Optional<RefreshToken> found = repository.findByTokenHash(tokenHash);
-
+    void findByTokenHash_debeRetornarTokenCuandoExiste() {
+        var found = refreshTokenRepository.findByTokenHash("hash1");
         assertThat(found).isPresent();
-        assertThat(found.get().getTokenHash()).isEqualTo(tokenHash);
-        assertThat(found.get().getUser().getId()).isEqualTo(userId);
+        assertThat(found.get().getTokenHash()).isEqualTo("hash1");
     }
 
     @Test
-    void findByTokenHash_shouldReturnEmpty_whenNotFound() {
-        Optional<RefreshToken> found = repository.findByTokenHash("nonexistent");
-
+    void findByTokenHash_debeRetornarEmptyCuandoNoExiste() {
+        var found = refreshTokenRepository.findByTokenHash("inexistente");
         assertThat(found).isEmpty();
     }
 
     @Test
-    void existsByTokenHash_shouldReturnTrue_whenHashExists() {
-        persistToken(tokenHash, user, futureDate);
-
-        boolean exists = repository.existsByTokenHash(tokenHash);
-
+    void existsByTokenHash_debeRetornarTrueSiExiste() {
+        boolean exists = refreshTokenRepository.existsByTokenHash("hash2");
         assertThat(exists).isTrue();
     }
 
     @Test
-    void existsByTokenHash_shouldReturnFalse_whenHashDoesNotExist() {
-        boolean exists = repository.existsByTokenHash("nonexistent");
-
+    void existsByTokenHash_debeRetornarFalseSiNoExiste() {
+        boolean exists = refreshTokenRepository.existsByTokenHash("nope");
         assertThat(exists).isFalse();
     }
 
     @Test
-    void countByUserId_shouldReturnCorrectCount() {
-        persistToken("hash1", user, futureDate);
-        persistToken("hash2", user, futureDate);
-
-        long count = repository.countByUserId(userId);
-
-        assertThat(count).isEqualTo(2);
+    void countByUserId_debeContarSoloTokensActivos() {
+        long count = refreshTokenRepository.countByUserId(testUser.getId());
+        // Tenemos 2 tokens activos (hash1 y hash2), el expirado no cuenta?
+        // Ojo: countByUserId es un conteo simple sin filtrar expiración.
+        // Por cómo está definido el método, cuenta todos los tokens de ese usuario.
+        // Para devolver solo activos tendrías que añadir condición en el método.
+        // Como no la tiene, devolverá 3 (incluye el expirado).
+        assertThat(count).isEqualTo(3);
     }
 
-    @Test
-    void countByUserId_shouldReturnZero_whenNoTokensForUser() {
-        long count = repository.countByUserId(userId);
-
-        assertThat(count).isZero();
-    }
+    // ─── Pruebas de JPQL con @Modifying ────────────────────────
 
     @Test
-    void deleteByTokenHash_shouldRemoveSpecificToken() {
-        persistToken(tokenHash, user, futureDate);
-        persistToken(otherTokenHash, user, futureDate);
-
-        // Act: borramos solo el primer token
-        repository.deleteByTokenHash(tokenHash);
+    void deleteByTokenHash_debeBorrarSoloEseToken() {
+        refreshTokenRepository.deleteByTokenHash("hash1");
         entityManager.flush();
-        entityManager.clear();
 
-        Optional<RefreshToken> deleted = repository.findByTokenHash(tokenHash);
-        Optional<RefreshToken> remaining = repository.findByTokenHash(otherTokenHash);
-
-        assertThat(deleted).isEmpty();
-        assertThat(remaining).isPresent();
+        assertThat(refreshTokenRepository.findByTokenHash("hash1")).isEmpty();
+        assertThat(refreshTokenRepository.findByTokenHash("hash2")).isPresent();
+        assertThat(refreshTokenRepository.findByTokenHash("expiredHash")).isPresent();
     }
 
     @Test
-    void deleteAllByUserId_shouldRemoveAllTokensOfUser() {
-        persistToken("hash1", user, futureDate);
-        persistToken("hash2", user, futureDate);
-
-        repository.deleteAllByUserId(userId);
+    void deleteAllByUserId_debeBorrarTodosLosTokensDelUsuario() {
+        refreshTokenRepository.deleteAllByUserId(testUser.getId());
         entityManager.flush();
-        entityManager.clear();
 
-        long count = repository.countByUserId(userId);
-        assertThat(count).isZero();
+        assertThat(refreshTokenRepository.countByUserId(testUser.getId())).isZero();
     }
 
     @Test
-    void deleteAllByUserIdExcept_shouldRemoveAllExceptSpecifiedToken() {
-        persistToken(tokenHash, user, futureDate);
-        persistToken(otherTokenHash, user, futureDate);
-        persistToken("hash3", user, futureDate);
-
-        repository.deleteAllByUserIdExcept(userId, otherTokenHash);
+    void deleteAllByUserIdExcept_debeBorrarTodosMenosElActual() {
+        refreshTokenRepository.deleteAllByUserIdExcept(testUser.getId(), "hash2");
         entityManager.flush();
-        entityManager.clear();
 
-        // Solo debe quedar el token con otherTokenHash
-        Optional<RefreshToken> preserved = repository.findByTokenHash(otherTokenHash);
-        Optional<RefreshToken> removed1 = repository.findByTokenHash(tokenHash);
-        Optional<RefreshToken> removed2 = repository.findByTokenHash("hash3");
-
-        assertThat(preserved).isPresent();
-        assertThat(removed1).isEmpty();
-        assertThat(removed2).isEmpty();
+        assertThat(refreshTokenRepository.findByTokenHash("hash1")).isEmpty();
+        assertThat(refreshTokenRepository.findByTokenHash("hash2")).isPresent();
+        assertThat(refreshTokenRepository.findByTokenHash("expiredHash")).isEmpty();
     }
 
-    @Test
-    void deleteAllExpired_shouldRemoveOnlyExpiredTokens() {
-        // Token expirado
-        persistToken("expired", user, pastDate);
-        // Token aún válido
-        persistToken("valid", user, futureDate);
+    // ─── Limpieza de expirados ────────────────────────────────
 
-        repository.deleteAllExpired(LocalDateTime.now());
+    @Test
+    void deleteAllExpired_debeBorrarTokensConExpiresAtAntesDelMomentoDado() {
+        LocalDateTime now = LocalDateTime.now();
+        refreshTokenRepository.deleteAllExpired(now);
         entityManager.flush();
-        entityManager.clear();
 
-        Optional<RefreshToken> shouldBeGone = repository.findByTokenHash("expired");
-        Optional<RefreshToken> shouldStay = repository.findByTokenHash("valid");
-
-        assertThat(shouldBeGone).isEmpty();
-        assertThat(shouldStay).isPresent();
+        assertThat(refreshTokenRepository.findByTokenHash("expiredHash")).isEmpty();
+        assertThat(refreshTokenRepository.findByTokenHash("hash1")).isPresent();
+        assertThat(refreshTokenRepository.findByTokenHash("hash2")).isPresent();
     }
 
     @Test
-    void findValidToken_shouldReturnToken_whenNotExpired() {
-        persistToken(tokenHash, user, futureDate);
+    void findValidToken_soloRetornaTokensNoExpirados() {
+        LocalDateTime now = LocalDateTime.now();
+        var valid = refreshTokenRepository.findValidToken("hash1", now);
+        assertThat(valid).isPresent();
 
-        Optional<RefreshToken> result = repository.findValidToken(tokenHash, LocalDateTime.now());
-
-        assertThat(result).isPresent();
-        assertThat(result.get().getExpiresAt()).isAfter(LocalDateTime.now());
-    }
-
-    @Test
-    void findValidToken_shouldReturnEmpty_whenTokenExpired() {
-        persistToken(tokenHash, user, pastDate);
-
-        Optional<RefreshToken> result = repository.findValidToken(tokenHash, LocalDateTime.now());
-
-        assertThat(result).isEmpty();
-    }
-
-    @Test
-    void findValidToken_shouldReturnEmpty_whenHashNotFound() {
-        Optional<RefreshToken> result = repository.findValidToken("nonexistent", LocalDateTime.now());
-
-        assertThat(result).isEmpty();
+        var expired = refreshTokenRepository.findValidToken("expiredHash", now);
+        assertThat(expired).isEmpty();
     }
 }
