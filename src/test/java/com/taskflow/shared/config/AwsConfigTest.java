@@ -2,26 +2,22 @@ package com.taskflow.shared.config;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.ApplicationContext;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.junit.jupiter.SpringExtension;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.test.context.ContextConfiguration;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.secretsmanager.SecretsManagerClient;
 import software.amazon.awssdk.services.ses.SesClient;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@SpringBootTest(classes = AwsConfig.class)
 class AwsConfigTest {
 
-    @Autowired
-    private static ApplicationContext context;
-
-    // ============================================================
-    // Perfil "dev" con credenciales
-    // ============================================================
-    @SpringBootTest(classes = AwsConfig.class)
+    // ─── Dev con credenciales ─────────────────────────────────
+    @ExtendWith(SpringExtension.class)
+    @ContextConfiguration(classes = AwsConfig.class)
     @ActiveProfiles("dev")
     @TestPropertySource(properties = {
             "aws.region=us-east-1",
@@ -51,10 +47,9 @@ class AwsConfigTest {
         }
     }
 
-    // ============================================================
-    // Perfil "dev" sin credenciales (usa DefaultCredentialsProvider)
-    // ============================================================
-    @SpringBootTest(classes = AwsConfig.class)
+    // ─── Dev sin credenciales ─────────────────────────────────
+    @ExtendWith(SpringExtension.class)
+    @ContextConfiguration(classes = AwsConfig.class)
     @ActiveProfiles("dev")
     @TestPropertySource(properties = {
             "aws.region=us-east-1",
@@ -70,19 +65,15 @@ class AwsConfigTest {
         private S3Client s3Client;
 
         @Test
-        void shouldStillCreateClientsWithDefaultProvider() {
+        void shouldCreateClientsWithDefaultProvider() {
             assertThat(sesClient).isNotNull();
             assertThat(s3Client).isNotNull();
-            // No falla porque DefaultCredentialsProvider puede fallar en CI,
-            // pero el bean se crea igual (solo fallará al usarlo).
-            // Para tests unitarios, basta con que el contexto cargue.
         }
     }
 
-    // ============================================================
-    // Perfil "prod"
-    // ============================================================
-    @SpringBootTest(classes = AwsConfig.class)
+    // ─── Prod ─────────────────────────────────────────────────
+    @ExtendWith(SpringExtension.class)
+    @ContextConfiguration(classes = AwsConfig.class)
     @ActiveProfiles("prod")
     @TestPropertySource(properties = "aws.region=us-east-1")
     static class ProdTest {
@@ -97,7 +88,7 @@ class AwsConfigTest {
         private SecretsManagerClient secretsManagerClient;
 
         @Test
-        void shouldCreateAllClients() {
+        void shouldCreateAllProdClients() {
             assertThat(sesClient).isNotNull();
             assertThat(s3Client).isNotNull();
             assertThat(secretsManagerClient).isNotNull();
