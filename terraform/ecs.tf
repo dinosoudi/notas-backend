@@ -80,7 +80,7 @@ resource "aws_ecs_task_definition" "app" {
       interval    = 30
       timeout     = 5
       retries     = 3
-      startPeriod = 60  # Spring Boot necesita ~30-60s para arrancar
+      startPeriod = 90  # Spring Boot necesita ~30-60s para arrancar
     }
   }])
 
