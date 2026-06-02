@@ -22,3 +22,5 @@ docker:
 docker-compose up -d
 docker-compose ps
 
+
+3 horas más en norte de virginia us-east-1 que en mi casa
