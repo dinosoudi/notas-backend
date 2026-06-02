@@ -81,7 +81,7 @@ resource "aws_lb_target_group" "app" {
 
   health_check {
     enabled             = true
-    path                = "/actuator/health"  # Tu endpoint de Spring Actuator
+    path                = "/api/v1/actuator/health"  # Tu endpoint de Spring Actuator
     healthy_threshold   = 2
     unhealthy_threshold = 3
     timeout             = 5
