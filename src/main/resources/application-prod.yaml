@@ -2,7 +2,7 @@
 # PERFIL: prod
 # Se activa con SPRING_PROFILES_ACTIVE=prod
 # Todas las variables vienen de AWS Secrets Manager
-# inyectadas como variables de entorno al pod en EKS
+# inyectadas como variables de entorno al contenedor en ECS/Fargate
 # ─────────────────────────────────────────────
 
 spring:
@@ -45,7 +45,7 @@ jwt:
 aws:
   region: ${AWS_REGION:us-east-1}
   # En prod NO se usan access key / secret key
-  # El rol IAM del pod en EKS provee las credenciales automáticamente
+  # El rol IAM de la task en ECS provee las credenciales automáticamente
   ses:
     from-email: ${AWS_SES_FROM_EMAIL}
   s3:
@@ -82,7 +82,7 @@ logging:
 
 # ─────────────────────────────────────────────
 # Actuator — health check para Kubernetes
-# Kubernetes llama /actuator/health como liveness y readiness probe
+# ECS llama /actuator/health como healthcheck del contenedor y del ALB
 # ─────────────────────────────────────────────
 management:
   endpoints:

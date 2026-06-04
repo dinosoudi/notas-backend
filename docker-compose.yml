@@ -31,5 +31,27 @@ services:
       postgres:
         condition: service_healthy
 
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: taskflow-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      DB_HOST: postgres        # ← nombre del servicio, no localhost
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-taskflow}
+      DB_USER: ${DB_USER:-taskflow_user}
+      DB_PASSWORD: ${DB_PASSWORD:-taskflow_pass}
+      JWT_SECRET: ${JWT_SECRET:-desarrollo-local-clave-segura-de-al-menos-64-caracteres-aqui}
+    ports:
+      - "${SERVER_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
 volumes:
   postgres_data:
