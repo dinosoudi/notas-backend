@@ -77,8 +77,6 @@ logging:
     org.flywaydb: INFO
     org.springframework.security: DEBUG
     org.hibernate: WARN
-  pattern:
-    console: '{"time":"%d{yyyy-MM-dd HH:mm:ss}","level":"%level","logger":"%logger{36}","msg":"%msg"}%n'
 
 # ─────────────────────────────────────────────
 # Actuator — health check para Kubernetes
