@@ -17,8 +17,7 @@ import software.amazon.awssdk.services.ses.SesClient;
  * Configuración de los clientes AWS SDK v2.
  *
  * En desarrollo (perfil dev): usa credenciales del .env / application-dev.yaml.
- * En producción (perfil prod): usa DefaultCredentialsProvider que lee
- * automáticamente las credenciales del rol IAM del pod en EKS.
+ * En producción (perfil prod): usa el rol IAM de la task en ECS Fargate — no necesita credenciales explícitas
  *
  * En prod NO necesitas access key ni secret key — el rol IAM del pod
  * tiene los permisos necesarios y AWS SDK los detecta solo.
@@ -36,7 +35,7 @@ public class AwsConfig {
     @Value("${aws.secret-access-key:}")
     private String secretAccessKey;
 
-    // ─── SES — envío de correos ───────────────────────────────
+    // ─── SES ──────────────────────────────────────────────────
 
     @Bean
     @Profile("dev")
@@ -60,38 +59,8 @@ public class AwsConfig {
     @Bean
     @Profile("prod")
     public SesClient sesClientProd() {
-        log.info("☁️  Iniciando SES Client en modo PROD — usando rol IAM del pod");
-        // En prod usa el rol IAM del pod en EKS — no necesita credenciales explícitas
+        log.info("☁️  Iniciando SES Client en modo PROD — usando rol IAM de la task");
         return SesClient.builder()
-                .region(Region.of(region))
-                .credentialsProvider(DefaultCredentialsProvider.create())
-                .build();
-    }
-
-    // ─── S3 — archivos (v2) ───────────────────────────────────
-
-    @Bean
-    @Profile("dev")
-    public S3Client s3ClientDev() {
-        log.info("☁️  Iniciando S3 Client en modo DEV");
-        if (accessKeyId.isBlank() || secretAccessKey.isBlank()) {
-            return S3Client.builder()
-                    .region(Region.of(region))
-                    .credentialsProvider(DefaultCredentialsProvider.create())
-                    .build();
-        }
-        return S3Client.builder()
-                .region(Region.of(region))
-                .credentialsProvider(StaticCredentialsProvider.create(
-                        AwsBasicCredentials.create(accessKeyId, secretAccessKey)))
-                .build();
-    }
-
-    @Bean
-    @Profile("prod")
-    public S3Client s3ClientProd() {
-        log.info("☁️  Iniciando S3 Client en modo PROD — usando rol IAM del pod");
-        return S3Client.builder()
                 .region(Region.of(region))
                 .credentialsProvider(DefaultCredentialsProvider.create())
                 .build();

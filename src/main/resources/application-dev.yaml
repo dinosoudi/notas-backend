@@ -12,6 +12,13 @@ jwt:
   refresh-expiration-ms-web: ${JWT_REFRESH_EXPIRATION_MS_WEB:604800000}
   refresh-expiration-ms-mobile: ${JWT_REFRESH_EXPIRATION_MS_MOBILE:2592000000}
 
+aws:
+  region: ${AWS_REGION:us-east-1}
+  access-key-id: ${AWS_ACCESS_KEY_ID:}
+  secret-access-key: ${AWS_SECRET_ACCESS_KEY:}
+  ses:
+    from-email: ${AWS_SES_FROM_EMAIL:noreply@localhost}
+
 server:
   port: ${SERVER_PORT:8080}
   servlet:

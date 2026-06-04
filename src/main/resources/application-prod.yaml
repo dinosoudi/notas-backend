@@ -48,8 +48,6 @@ aws:
   # El rol IAM de la task en ECS provee las credenciales automáticamente
   ses:
     from-email: ${AWS_SES_FROM_EMAIL}
-  s3:
-    bucket: ${AWS_S3_BUCKET}
 
 # ─────────────────────────────────────────────
 # App
