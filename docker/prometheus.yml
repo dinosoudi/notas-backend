@@ -1,0 +1,9 @@
+global:
+  scrape_interval: 15s      # raspa métricas cada 15 segundos
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'taskflow-backend'
+    metrics_path: '/api/v1/actuator/prometheus'
+    static_configs:
+      - targets: ['backend:8080']   # nombre del servicio en docker-compose

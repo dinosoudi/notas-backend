@@ -3,6 +3,9 @@ spring:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:taskflow}
     username: ${DB_USER:taskflow_user}
     password: ${DB_PASSWORD:taskflow_pass}
+
+    hikari:
+      maximum-pool-size: 50  # más conexiones para pruebas de carga
   flyway:
     database: postgresql
 

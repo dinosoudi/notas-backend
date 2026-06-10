@@ -147,11 +147,6 @@
 
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
-            <artifactId>s3</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
             <artifactId>secretsmanager</artifactId>
         </dependency>
 
@@ -234,6 +229,15 @@
             <scope>test</scope>
         </dependency>
 
+        <!-- ══════════════════════════════════════
+             LOGS — JSON estructurado para CloudWatch
+        ══════════════════════════════════════ -->
+        <dependency>
+            <groupId>net.logstash.logback</groupId>
+            <artifactId>logstash-logback-encoder</artifactId>
+            <version>7.4</version>
+        </dependency>
+
     </dependencies>
 
     <!-- ══════════════════════════════════════
@@ -247,15 +251,6 @@
                 <version>${aws.sdk.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
-            </dependency>
-
-            <!-- ══════════════════════════════════════
-                 Logs para AWS Cloud Watch
-            ══════════════════════════════════════ -->
-            <dependency>
-                <groupId>net.logstash.logback</groupId>
-                <artifactId>logstash-logback-encoder</artifactId>
-                <version>7.4</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

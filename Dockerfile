@@ -45,9 +45,9 @@ ENV SPRING_PROFILES_ACTIVE=prod
 ENV JAVA_OPTS="-Xms256m -Xmx512m -XX:+UseContainerSupport"
 
 # Healthcheck — Docker verifica que la app esté viva
-# Kubernetes usa su propio healthcheck via Actuator
+# ECS también usa este endpoint como healthcheck del contenedor
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD wget -qO- http://localhost:8080/actuator/health || exit 1
+    CMD wget -qO- http://localhost:8080/api/v1/actuator/health || exit 1
 
 # Comando de arranque
 # $JAVA_OPTS permite pasar opciones JVM desde variables de entorno

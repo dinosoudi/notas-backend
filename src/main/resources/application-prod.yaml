@@ -11,11 +11,8 @@ spring:
     username: ${DB_USER}
     password: ${DB_PASSWORD}
     hikari:
-      minimum-idle: 5
-      maximum-pool-size: 20
-      connection-timeout: 30000
-      idle-timeout: 600000
-      max-lifetime: 1800000
+      maximum-pool-size: 5   # fórmula HikariCP: (2 vCPUs * 2) + 1
+      minimum-idle: 2
 
   jpa:
     hibernate:
@@ -94,3 +91,5 @@ management:
     export:
       prometheus:
         enabled: true
+    tags:
+      application: ${spring.application.name}
