@@ -18,7 +18,11 @@ terraform plan -var-file="terraform.tfvars"
 # Crear toda la infra (~10 minutos, RDS es lo más lento)
 terraform apply -var-file="terraform.tfvars"
 
+En cambios al codigo, para que los reconozca bien docker hay que hacer:
 
+docker-compose down 
+docker rmi -f notas-backend-backend
+docker-compose up -d --build
 
 Host: postgres (nombre del servicio, no localhost)
 Port: 5432

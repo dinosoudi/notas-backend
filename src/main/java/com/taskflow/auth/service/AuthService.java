@@ -14,11 +14,12 @@ import com.taskflow.users.entity.User;
 import com.taskflow.users.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
+import java.security.MessageDigest;
+import java.nio.charset.StandardCharsets;
+import java.util.HexFormat;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -321,7 +322,7 @@ public class AuthService {
     @Transactional
     public RefreshResponse refresh(RefreshRequest request) {
 
-        String incomingHash = passwordEncoder.encode(request.getRefreshToken());
+        String incomingHash = hashToken(request.getRefreshToken());
 
         // 1. Buscar token válido (no expirado)
         RefreshToken refreshToken = refreshTokenRepository
@@ -337,7 +338,7 @@ public class AuthService {
         // 3. Generar nuevo access token y refresh token
         String newAccessToken = jwtService.generateAccessToken(user.getId());
         String newRawRefreshToken = UUID.randomUUID().toString();
-        String newRefreshHash = passwordEncoder.encode(newRawRefreshToken);
+        String newRefreshHash = hashToken(newRawRefreshToken);
 
         RefreshToken newRefreshToken = RefreshToken.builder()
                 .user(user)
@@ -359,7 +360,7 @@ public class AuthService {
 
     @Transactional
     public void logout(String rawRefreshToken) {
-        String tokenHash = passwordEncoder.encode(rawRefreshToken);
+        String tokenHash = hashToken(rawRefreshToken);
         refreshTokenRepository.deleteByTokenHash(tokenHash);
     }
 
@@ -375,7 +376,7 @@ public class AuthService {
     private TokensDTO generateTokens(User user) {
         String accessToken = jwtService.generateAccessToken(user.getId());
         String rawRefreshToken = UUID.randomUUID().toString();
-        String refreshHash = passwordEncoder.encode(rawRefreshToken);
+        String refreshHash = hashToken(rawRefreshToken);
 
         RefreshToken refreshToken = RefreshToken.builder()
                 .user(user)
@@ -411,5 +412,15 @@ public class AuthService {
 
             emailService.resendVerificationEmail(user.getEmail(), user.getName(), token);
         });
+    }
+
+    private String hashToken(String rawToken) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(rawToken.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(hash);
+        } catch (Exception e) {
+            throw new RuntimeException("Error hasheando token", e);
+        }
     }
 }
