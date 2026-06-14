@@ -10,6 +10,15 @@ git push a prod   ← GitHub Actions deploya
 pruebas           ← verificas que todo funciona 
 terraform destroy ← bajas todo
 
+cd terraform
+
+# Ver qué va a crear sin crear nada
+terraform plan -var-file="terraform.tfvars"
+
+# Crear toda la infra (~10 minutos, RDS es lo más lento)
+terraform apply -var-file="terraform.tfvars"
+
+
 
 Host: postgres (nombre del servicio, no localhost)
 Port: 5432
@@ -26,6 +35,15 @@ k6 run k6/load-test.js
 
 
 3 horas más en norte de virginia us-east-1 que en mi casa
+
+Estructura de carpetas con tree y con tree /F para archivos
+
+| Servicio | URL | Credenciales               |
+|---|---|----------------------------| 
+| API REST | `http://localhost:8080/api/v1` | —                          |
+| pgAdmin | `http://localhost:5050` | admin@taskflow.com / admin |
+| Prometheus | `http://localhost:9090` | —                          |
+| Grafana | `http://localhost:3001` | admin / Hesoyam:3          |
 
 
 # Taskflow Backend
@@ -47,6 +65,7 @@ API REST para gestión de notas y tareas, construida con Java 21 + Spring Boot 3
 | Contenedores (local) | Docker Compose |
 | Observabilidad | Prometheus + Grafana |
 | Logs | Logback + Logstash encoder (JSON en prod, texto en dev) |
+| Pruebas de carga | k6 |
 
 ## Estructura del proyecto
 
@@ -104,12 +123,15 @@ Copia `.env.example` a `.env` y ajusta los valores. Las variables con default no
 | `JWT_SECRET` | Clave secreta para firmar JWT (mín. 64 chars) | default de desarrollo |
 | `SERVER_PORT` | Puerto del servidor | `8080` |
 | `AWS_REGION` | Región de AWS | `us-east-1` |
-| `AWS_ACCESS_KEY_ID` | Access key de AWS (solo dev, para SES) | — |
-| `AWS_SECRET_ACCESS_KEY` | Secret key de AWS (solo dev, para SES) | — |
+| `AWS_ACCESS_KEY_ID` | Access key de AWS (solo dev con Docker, para SES) | — |
+| `AWS_SECRET_ACCESS_KEY` | Secret key de AWS (solo dev con Docker, para SES) | — |
 | `AWS_SES_FROM_EMAIL` | Email remitente para notificaciones | — |
 | `APP_URL` | URL base del frontend (para links en emails) | — |
 
-> **Nota:** `AWS_ACCESS_KEY_ID` y `AWS_SECRET_ACCESS_KEY` solo son necesarias en dev si quieres probar el envío real de emails con SES. En prod el rol IAM de la task en ECS provee las credenciales automáticamente.
+> **Nota sobre credenciales AWS:**
+> - **IntelliJ/local:** el SDK lee automáticamente `~/.aws/credentials` configurado con `aws configure` — no necesitas variables de entorno
+> - **Docker Compose:** el contenedor no tiene acceso a `~/.aws/credentials` del host, por eso necesita `AWS_ACCESS_KEY_ID` y `AWS_SECRET_ACCESS_KEY` en el `.env`
+> - **ECS Fargate (prod):** el rol IAM de la task provee las credenciales automáticamente — no se necesita ninguna key
 
 ## Servicios disponibles con Docker Compose
 
@@ -120,7 +142,7 @@ Una vez levantado `docker-compose up`, tienes acceso a:
 | API REST | `http://localhost:8080/api/v1` | — |
 | pgAdmin | `http://localhost:5050` | admin@taskflow.com / admin |
 | Prometheus | `http://localhost:9090` | — |
-| Grafana | `http://localhost:3001` | admin / admin |
+| Grafana | `http://localhost:3001` | admin / admin (te pide cambiarla al primer login) |
 
 ### Conectar pgAdmin a PostgreSQL
 
@@ -160,13 +182,11 @@ Todas las métricas incluyen la etiqueta `application="taskflow-backend"` para i
 
 ### Dashboard en Grafana
 
-1. Entra a `http://localhost:3001` (admin / admin)
-2. Ve a **Dashboards → Import**
-3. Escribe `4701` en el campo de ID y click **Load**
-4. En el dropdown **DS_PROMETHEUS** selecciona **Prometheus**
-5. Click **Import**
+El dashboard JVM se provisiona automáticamente desde `docker/grafana/provisioning/dashboards/jvm-micrometer.json` — no hay que importarlo manualmente.
 
-Para ver los datos, selecciona:
+Al entrar a `http://localhost:3001` ve a **Dashboards → TaskFlow → JVM (Micrometer)**.
+
+Para ver los datos selecciona:
 - **Application:** `taskflow-backend`
 - **Instance:** `backend:8080`
 
@@ -232,6 +252,7 @@ Las migraciones están en `src/main/resources/db/migration/` y se ejecutan autom
 | V5 | Stored procedure: borrado en cascada de tags |
 | V6 | Stored procedure: resumen de notas |
 | V7 | Columnas para reset de contraseña |
+| V8 | Usuario de prueba para k6 (k6test@taskflow.com) |
 
 ## Endpoints principales
 
@@ -351,10 +372,6 @@ terraform destroy -var-file="terraform.tfvars"
 | `SONAR_PROJECT_KEY` | Clave del proyecto en SonarCloud |
 | `SONAR_ORGANIZATION` | Organización en SonarCloud |
 
-## Diferencia horaria
-
-La región `us-east-1` (Norte de Virginia) tiene **1 hora más** que Ciudad de México en horario de verano (UTC-5 vs UTC-6). Los timestamps en CloudWatch aparecen en UTC — resta 5 o 6 horas según la época del año para convertir a hora local.
-
 ## Pruebas de carga (k6)
 
 Los scripts están en `/k6`. Requiere [k6](https://k6.io) instalado.
@@ -378,21 +395,19 @@ k6 run k6/load-test.js
 | Arranque | 30s | 50 |
 | Carga alta | 1m | 200 |
 | Carga muy alta | 1m | 500 |
-| Límite | 1m | 1000 |
+| Límite | 1m | 1,000 |
 | Bajada | 30s | 0 |
 
-### Resultados con configuración actual (pool 50)
+Los VUs (Virtual Users) son usuarios simultáneos simulados — cada uno ejecuta requests en loop independientemente.
+
+### Resultados de referencia
 
 Corrido en local con Docker Compose, PostgreSQL en contenedor:
 
-| Métrica | Resultado |
-|---|---|
-| Usuarios simultáneos máx | 1,000 VUs |
-| Requests totales | ~79,000 en 4 minutos |
-| Throughput | ~328 req/s |
-| Latencia promedio | 481ms |
-| p95 | 2.19s |
-| Errores | 0% |
+| Configuración | p95 | Throughput | Errores |
+|---|---|---|---|
+| Pool default (10 conexiones) | 5.29s ❌ | 156 req/s | 0% |
+| Pool optimizado (50 conexiones) | 2.19s ✅ | 328 req/s | 0% |
 
 ### Qué prueba el script
 
@@ -401,22 +416,20 @@ Cada VU ejecuta en loop:
 2. `POST /notes` — crear una nota
 3. `GET /tags` — listar tags
 
-Usa un usuario de prueba creado via Flyway (`V8__insert_k6_test_user.sql`)
-con `email_verified = true` para login directo sin verificación de correo.
+Usa el usuario de prueba creado en V8 (`k6test@taskflow.com` / `K6TestPass123!`) con `email_verified = true` para login directo sin verificación de correo.
 
-### Configuración de Hikari relevante
+## Pool de conexiones Hikari
 
-El cuello de botella con carga alta es el pool de conexiones a la DB.
-Con el pool default de 10 conexiones el p95 a 1000 VUs es ~5.3s.
-Con pool de 50 conexiones el p95 baja a ~2.2s y el throughput se duplica.
+El pool se configura diferente por ambiente. La lógica: más conexiones = más throughput, pero cada conexión consume RAM en la DB.
 
-```yaml
-spring:
-  datasource:
-    hikari:
-      maximum-pool-size: 50  # default Spring Boot: 10
-```
+| Perfil | `maximum-pool-size` | Por qué |
+|---|---|---|
+| `dev` (Docker) | 50 | Para pruebas de carga con k6 |
+| base / `test` | 10 | Default seguro de Spring Boot |
+| `prod` (ECS) | 5 | Fórmula HikariCP: `(vCPUs * 2) + discos` = `(2*2)+1` para db.t3.micro |
 
-> **Nota:** En producción con RDS db.t3.micro (2 vCPUs) el valor óptimo
-> según la fórmula de HikariCP es `(2 * 2) + 1 = 5`. El valor de 50
-> es para pruebas locales con Docker donde la DB tiene más recursos disponibles.
+> **Referencia:** con pool=10 a 1,000 VUs el p95 es ~5.3s. Con pool=50 baja a ~2.2s y el throughput se duplica. En prod el límite real es `max_connections` de PostgreSQL (default 100) dividido entre las instancias de la app.
+
+## Diferencia horaria
+
+La región `us-east-1` (Norte de Virginia) tiene **1 hora más** que Ciudad de México en horario de verano (UTC-5 vs UTC-6). Los timestamps en CloudWatch aparecen en UTC — resta 5 o 6 horas según la época del año para convertir a hora local.

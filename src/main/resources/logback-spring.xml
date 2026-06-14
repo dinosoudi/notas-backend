@@ -16,7 +16,7 @@
             <appender-ref ref="CONSOLE"/>
         </root>
 
-        <!-- Tu código en DEBUG, el resto en INFO -->
+        <!-- Tu código en INFO -->
         <logger name="com.taskflow" level="DEBUG"/>
         <logger name="org.flywaydb" level="INFO"/>
         <logger name="org.hibernate" level="WARN"/>
@@ -36,7 +36,7 @@
         </root>
 
         <logger name="com.taskflow" level="DEBUG"/>
-        <logger name="org.hibernate.SQL" level="DEBUG"/>
+        <logger name="org.hibernate.SQL" level="INFO"/>
     </springProfile>
 
 </configuration>
