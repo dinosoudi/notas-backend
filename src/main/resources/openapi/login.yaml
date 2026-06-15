@@ -1,0 +1,421 @@
+openapi: 3.0.3
+
+info:
+  title: TaskFlow API
+  description: Contrato del módulo de autenticación — Login y Refresh Token (v1.1)
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Local development
+  - url: https://api.taskflow.com/v1
+    description: Production (AWS)
+
+tags:
+  - name: Auth
+    description: Registro, login y recuperación de contraseña
+
+paths:
+  /auth/login:
+    post:
+      tags:
+        - Auth
+      summary: Iniciar sesión
+      description: |
+        Autentica a un usuario con correo (o teléfono en v2) y contraseña.
+
+        **Reglas de seguridad importantes:**
+        - Si el email no existe O la contraseña es incorrecta, se devuelve el
+          **mismo mensaje genérico** (401). Nunca se revela cuál de los dos falló
+          — esto evita que alguien descubra qué emails están registrados.
+        - Si la cuenta fue creada con Google (auth_provider = GOOGLE), se
+          devuelve un 401 con mensaje especial indicando que use Google.
+        - Después de 5 intentos fallidos consecutivos, la cuenta se bloquea
+          temporalmente 15 minutos (429).
+        - El teléfono como identificador es v2 — en v1 solo se acepta email.
+
+        **Notas de implementación:**
+        - El backend compara la contraseña recibida contra el hash con bcrypt.matches().
+        - Si `email_verified = false` en BD → devolver 403, no generar JWT.
+        - No hay roles en v1 — el JWT solo incluye claims `sub` (userId), `iat`, `exp`.
+        - accessToken dura 24h. refreshToken dura 7 días (web) o 30 días (móvil — v2).
+        - Cada login exitoso resetea el contador de intentos fallidos.
+      operationId: loginUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            examples:
+              login_con_email:
+                summary: Login con correo electrónico (v1)
+                value:
+                  identifier: "ana@email.com"
+                  password: "MiPassword123!"
+              login_con_telefono:
+                summary: Login con teléfono (v2 — pendiente)
+                value:
+                  identifier: "+52 55 1234 5678"
+                  password: "MiPassword123!"
+
+      responses:
+        '200':
+          description: Login exitoso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+              example:
+                message: "Inicio de sesión exitoso"
+                user:
+                  id: "550e8400-e29b-41d4-a716-446655440000"
+                  name: "Ana García"
+                  email: "ana@email.com"
+                  phone: "+52 55 1234 5678"
+                  emailVerified: true
+                  authProvider: "EMAIL"
+                  createdAt: "2025-04-15T10:30:00Z"
+                tokens:
+                  accessToken: "eyJhbGciOiJSUzI1NiJ9..."
+                  refreshToken: "dGhpcyBpcyBhIHJlZnJlc2g..."
+                  accessTokenExpiresIn: 86400
+                  refreshTokenExpiresIn: 604800
+
+        '401':
+          description: Credenciales incorrectas o cuenta de Google
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                credenciales_invalidas:
+                  summary: Email o contraseña incorrectos (mensaje genérico intencional)
+                  value:
+                    status: 401
+                    error: "UNAUTHORIZED"
+                    message: "Correo o contraseña incorrectos"
+                    field: null
+                    timestamp: "2025-04-15T10:30:00Z"
+                cuenta_google:
+                  summary: La cuenta fue creada con Google
+                  value:
+                    status: 401
+                    error: "UNAUTHORIZED"
+                    message: "Esta cuenta usa Google para iniciar sesión. Usa el botón 'Continuar con Google'."
+                    field: null
+                    timestamp: "2025-04-15T10:30:00Z"
+
+        '400':
+          description: Datos inválidos en el request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                formato_email_invalido:
+                  summary: El identifier no es un email ni teléfono válido
+                  value:
+                    status: 400
+                    error: "BAD_REQUEST"
+                    message: "Ingresa un correo electrónico válido"
+                    field: "identifier"
+                    timestamp: "2025-04-15T10:30:00Z"
+                campos_vacios:
+                  summary: Campos requeridos vacíos
+                  value:
+                    status: 400
+                    error: "BAD_REQUEST"
+                    message: "El correo y la contraseña son requeridos"
+                    field: "identifier"
+                    timestamp: "2025-04-15T10:30:00Z"
+
+        '403':
+          description: Cuenta no verificada — el usuario no confirmó su correo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: 403
+                error: "FORBIDDEN"
+                message: "Debes verificar tu correo antes de iniciar sesión. Revisa tu bandeja de entrada."
+                field: null
+                timestamp: "2025-04-15T10:30:00Z"
+
+        '429':
+          description: Demasiados intentos fallidos — cuenta bloqueada temporalmente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: 429
+                error: "TOO_MANY_REQUESTS"
+                message: "Demasiados intentos fallidos. Cuenta bloqueada por 15 minutos."
+                field: null
+                retryAfterSeconds: 900
+                timestamp: "2025-04-15T10:30:00Z"
+
+        '500':
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: 500
+                error: "INTERNAL_SERVER_ERROR"
+                message: "Ocurrió un error inesperado. Intenta de nuevo."
+                timestamp: "2025-04-15T10:30:00Z"
+
+  /auth/refresh:
+    post:
+      tags:
+        - Auth
+      summary: Renovar access token
+      description: |
+        Recibe el refreshToken y devuelve un nuevo accessToken sin necesidad
+        de hacer login de nuevo. El frontend debe llamar este endpoint
+        automáticamente cuando recibe un 401 en cualquier request.
+
+        **Flujo típico en el frontend:**
+        1. Request falla con 401 (accessToken expirado).
+        2. Frontend llama /auth/refresh con el refreshToken.
+        3. Si es válido → recibe nuevo accessToken → reintenta el request original.
+        4. Si el refreshToken también expiró → redirigir al login.
+
+        **Notas de implementación:**
+        - El refreshToken se guarda hasheado en BD (tabla refresh_tokens).
+        - Cada refresh rota el token — se invalida el anterior y se genera uno nuevo
+          (refresh token rotation). Esto detecta robo de tokens.
+        - Si el mismo refreshToken se usa dos veces → posible robo → invalidar
+          todos los tokens del usuario y forzar login.
+        - refreshToken web dura 7 días, móvil 30 días (v2).
+      operationId: refreshToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+            example:
+              refreshToken: "dGhpcyBpcyBhIHJlZnJlc2g..."
+
+      responses:
+        '200':
+          description: Nuevo accessToken generado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefreshResponse'
+              example:
+                accessToken: "eyJhbGciOiJSUzI1NiJ9_nuevo..."
+                refreshToken: "bnVldm9fcmVmcmVzaF90b2tlbg..."
+                accessTokenExpiresIn: 86400
+                refreshTokenExpiresIn: 604800
+
+        '401':
+          description: RefreshToken inválido, expirado o ya fue usado (posible robo)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                token_invalido:
+                  summary: Token no existe en BD
+                  value:
+                    status: 401
+                    error: "UNAUTHORIZED"
+                    message: "Sesión expirada. Inicia sesión de nuevo."
+                    field: null
+                    timestamp: "2025-04-15T10:30:00Z"
+                token_reusado:
+                  summary: Token usado dos veces — posible robo detectado
+                  value:
+                    status: 401
+                    error: "UNAUTHORIZED"
+                    message: "Sesión inválida. Inicia sesión de nuevo."
+                    field: null
+                    timestamp: "2025-04-15T10:30:00Z"
+
+        '500':
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: 500
+                error: "INTERNAL_SERVER_ERROR"
+                message: "Ocurrió un error inesperado. Intenta de nuevo."
+                timestamp: "2025-04-15T10:30:00Z"
+
+components:
+  schemas:
+
+    LoginRequest:
+      type: object
+      required:
+        - identifier
+        - password
+      properties:
+        identifier:
+          type: string
+          description: |
+            Identificador del usuario. En v1 acepta únicamente correo electrónico.
+            En v2 también aceptará número de teléfono con formato internacional.
+            El backend detecta automáticamente si es email o teléfono por el formato.
+          example: "ana@email.com"
+
+        password:
+          type: string
+          format: password
+          minLength: 1
+          description: |
+            Contraseña en texto plano — viaja cifrada por HTTPS.
+            El backend la compara con el hash almacenado usando bcrypt.matches().
+          example: "MiPassword123!"
+
+    RefreshRequest:
+      type: object
+      required:
+        - refreshToken
+      properties:
+        refreshToken:
+          type: string
+          description: |
+            Token de refresco obtenido en /auth/login o /auth/verify-email.
+            Cada uso genera un token nuevo (rotation) e invalida el anterior.
+          example: "dGhpcyBpcyBhIHJlZnJlc2g..."
+
+    RefreshResponse:
+      type: object
+      description: Nuevos tokens tras un refresh exitoso
+      properties:
+        accessToken:
+          type: string
+          description: Nuevo accessToken JWT. El anterior queda inválido.
+          example: "eyJhbGciOiJSUzI1NiJ9_nuevo..."
+        refreshToken:
+          type: string
+          description: Nuevo refreshToken rotado. El anterior queda inválido.
+          example: "bnVldm9fcmVmcmVzaF90b2tlbg..."
+        accessTokenExpiresIn:
+          type: integer
+          description: Segundos hasta que expira el nuevo accessToken. Siempre 86400.
+          example: 86400
+        refreshTokenExpiresIn:
+          type: integer
+          description: Segundos hasta que expira el nuevo refreshToken. 604800 (web) o 2592000 (móvil v2).
+          example: 604800
+
+    AuthResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: "Inicio de sesión exitoso"
+        user:
+          $ref: '#/components/schemas/UserDTO'
+        tokens:
+          $ref: '#/components/schemas/TokensDTO'
+
+    UserDTO:
+      type: object
+      description: Datos públicos del usuario — nunca incluir password_hash ni tokens internos
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        name:
+          type: string
+          example: "Ana García"
+        email:
+          type: string
+          format: email
+          example: "ana@email.com"
+        phone:
+          type: string
+          nullable: true
+          example: "+52 55 1234 5678"
+        emailVerified:
+          type: boolean
+          description: Siempre true aquí — si es false el login devuelve 403 antes de llegar a este response.
+          example: true
+        authProvider:
+          type: string
+          enum:
+            - EMAIL
+            - GOOGLE
+          example: "EMAIL"
+        createdAt:
+          type: string
+          format: date-time
+          example: "2025-04-15T10:30:00Z"
+
+    TokensDTO:
+      type: object
+      properties:
+        accessToken:
+          type: string
+          description: |
+            JWT firmado con RS256.
+            Claims: sub (userId), iat, exp. Sin roles en v1.
+            Duración: 24 horas. Enviar como: Authorization: Bearer {token}
+          example: "eyJhbGciOiJSUzI1NiJ9..."
+        refreshToken:
+          type: string
+          description: |
+            Token opaco para renovar el accessToken sin hacer login.
+            Duración web: 7 días (604800s). Duración móvil: 30 días (2592000s) — v2.
+            Guardar en httpOnly cookie (no localStorage).
+          example: "dGhpcyBpcyBhIHJlZnJlc2g..."
+        accessTokenExpiresIn:
+          type: integer
+          description: Segundos hasta que expira el accessToken. Siempre 86400 (24h).
+          example: 86400
+        refreshTokenExpiresIn:
+          type: integer
+          description: |
+            Segundos hasta que expira el refreshToken.
+            Web (v1): 604800 (7 días). Móvil (v2): 2592000 (30 días).
+          example: 604800
+
+    ErrorResponse:
+      type: object
+      properties:
+        status:
+          type: integer
+          example: 401
+        error:
+          type: string
+          example: "UNAUTHORIZED"
+        message:
+          type: string
+          description: Mensaje para mostrar al usuario.
+          example: "Correo o contraseña incorrectos"
+        field:
+          type: string
+          nullable: true
+          example: null
+        retryAfterSeconds:
+          type: integer
+          nullable: true
+          description: Solo presente en 429.
+          example: 900
+        timestamp:
+          type: string
+          format: date-time
+          example: "2025-04-15T10:30:00Z"
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT obtenido en /auth/login o /auth/verify-email.
+        Claims: sub (userId), iat, exp. Sin roles en v1.
+        Enviar como: Authorization: Bearer {accessToken}

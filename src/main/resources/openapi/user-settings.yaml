@@ -1,0 +1,850 @@
+openapi: 3.0.3
+
+info:
+  title: TaskFlow API
+  description: Contrato del módulo de configuración de usuario
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Local development
+  - url: https://api.taskflow.com/v1
+    description: Production (AWS)
+
+tags:
+  - name: Users
+    description: Perfil y configuración del usuario autenticado
+  - name: Auth
+    description: Sesiones y logout
+
+paths:
+
+  # ─────────────────────────────────────────────
+  # PERFIL
+  # ─────────────────────────────────────────────
+  /users/me:
+    get:
+      tags:
+        - Users
+      summary: Obtener perfil del usuario
+      description: |
+        Devuelve todos los datos públicos del usuario autenticado,
+        incluyendo sus preferencias guardadas en BD.
+
+        **Notas de implementación:**
+        - Extraer userId del JWT claim `sub` — nunca recibirlo como parámetro.
+        - Nunca devolver password_hash, reset_code, ni tokens internos.
+      operationId: getMyProfile
+      security:
+        - BearerAuth: []
+
+      responses:
+        '200':
+          description: Perfil del usuario
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileResponse'
+              example:
+                id: "550e8400-e29b-41d4-a716-446655440000"
+                name: "Ana García"
+                email: "ana@email.com"
+                phone: "+52 55 1234 5678"
+                emailVerified: true
+                authProvider: "EMAIL"
+                preferences:
+                  darkMode: false
+                  language: "es"
+                createdAt: "2025-04-15T10:30:00Z"
+                deletionScheduledAt: null
+
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ─────────────────────────────────────────────
+  # CAMBIAR NOMBRE
+  # ─────────────────────────────────────────────
+  /users/me/name:
+    patch:
+      tags:
+        - Users
+      summary: Actualizar nombre
+      description: |
+        Actualiza únicamente el nombre del usuario.
+        No afecta ningún otro campo del perfil.
+      operationId: updateName
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateNameRequest'
+            example:
+              name: "Ana García López"
+
+      responses:
+        '200':
+          description: Nombre actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileResponse'
+              example:
+                id: "550e8400-e29b-41d4-a716-446655440000"
+                name: "Ana García López"
+                email: "ana@email.com"
+                phone: "+52 55 1234 5678"
+                emailVerified: true
+                authProvider: "EMAIL"
+                preferences:
+                  darkMode: false
+                  language: "es"
+                createdAt: "2025-04-15T10:30:00Z"
+                deletionScheduledAt: null
+
+        '400':
+          description: Nombre inválido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: 400
+                error: "BAD_REQUEST"
+                message: "El nombre debe tener entre 2 y 100 caracteres"
+                field: "name"
+                timestamp: "2025-04-15T12:00:00Z"
+
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ─────────────────────────────────────────────
+  # CAMBIAR TELÉFONO
+  # ─────────────────────────────────────────────
+  /users/me/phone:
+    patch:
+      tags:
+        - Users
+      summary: Actualizar teléfono
+      description: |
+        Actualiza únicamente el teléfono del usuario.
+
+        **v1:** Se guarda directamente sin verificación — el teléfono es
+        solo un dato de perfil, no se usa para autenticación todavía.
+
+        **v2 (pendiente):** Este endpoint cambiará — al actualizar el teléfono
+        se enviará un SMS con código de verificación y no se guardará hasta
+        que el usuario confirme el código. El flujo será similar a
+        /auth/verify-reset-code. Por eso el teléfono va en su propio endpoint
+        separado del nombre — para que el cambio de flujo en v2 no afecte nada más.
+
+        **Notas de implementación:**
+        - Enviar null para eliminar el teléfono del perfil.
+        - Validar formato internacional si se envía un valor.
+      operationId: updatePhone
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePhoneRequest'
+            examples:
+              agregar_telefono:
+                summary: Guardar o cambiar teléfono
+                value:
+                  phone: "+52 55 9876 5432"
+              eliminar_telefono:
+                summary: Quitar teléfono del perfil
+                value:
+                  phone: null
+
+      responses:
+        '200':
+          description: Teléfono actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileResponse'
+              example:
+                id: "550e8400-e29b-41d4-a716-446655440000"
+                name: "Ana García"
+                email: "ana@email.com"
+                phone: "+52 55 9876 5432"
+                emailVerified: true
+                authProvider: "EMAIL"
+                preferences:
+                  darkMode: false
+                  language: "es"
+                createdAt: "2025-04-15T10:30:00Z"
+                deletionScheduledAt: null
+
+        '400':
+          description: Formato de teléfono inválido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: 400
+                error: "BAD_REQUEST"
+                message: "Ingresa un número de teléfono válido en formato internacional. Ejemplo: +52 55 1234 5678"
+                field: "phone"
+                timestamp: "2025-04-15T12:00:00Z"
+
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ─────────────────────────────────────────────
+  # CAMBIAR CONTRASEÑA
+  # ─────────────────────────────────────────────
+  /users/me/password:
+    patch:
+      tags:
+        - Users
+      summary: Cambiar contraseña
+      description: |
+        Cambia la contraseña del usuario autenticado.
+        Requiere la contraseña actual como verificación de identidad.
+
+        **Notas de implementación:**
+        - Verificar currentPassword contra el hash en BD con bcrypt.matches().
+        - La nueva contraseña no puede ser igual a la actual.
+        - Hashear newPassword con bcrypt (cost 12) antes de guardar.
+        - Si closeOtherSessions = true: invalidar todos los refreshTokens
+          del usuario excepto el del dispositivo actual (el que hace el request).
+          Identificar el dispositivo actual por el refreshToken en la cookie.
+        - Incrementar token_version en BD para invalidar accessTokens anteriores.
+      operationId: changePassword
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+            examples:
+              sin_cerrar_sesiones:
+                summary: Cambiar contraseña sin cerrar otras sesiones
+                value:
+                  currentPassword: "MiPassword123!"
+                  newPassword: "NuevoPassword456!"
+                  confirmPassword: "NuevoPassword456!"
+                  closeOtherSessions: false
+              cerrando_otras_sesiones:
+                summary: Cambiar contraseña y cerrar todas las demás sesiones
+                value:
+                  currentPassword: "MiPassword123!"
+                  newPassword: "NuevoPassword456!"
+                  confirmPassword: "NuevoPassword456!"
+                  closeOtherSessions: true
+
+      responses:
+        '200':
+          description: Contraseña actualizada exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              examples:
+                sin_cerrar:
+                  summary: Contraseña cambiada, sesiones activas intactas
+                  value:
+                    message: "Contraseña actualizada correctamente"
+                    sessionsClosedCount: 0
+                cerrando:
+                  summary: Contraseña cambiada y otras sesiones cerradas
+                  value:
+                    message: "Contraseña actualizada. Se cerraron 2 sesiones en otros dispositivos."
+                    sessionsClosedCount: 2
+
+        '400':
+          description: Datos inválidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                passwords_no_coinciden:
+                  summary: newPassword y confirmPassword no coinciden
+                  value:
+                    status: 400
+                    error: "BAD_REQUEST"
+                    message: "Las contraseñas no coinciden"
+                    field: "confirmPassword"
+                    timestamp: "2025-04-15T12:00:00Z"
+                misma_password:
+                  summary: La nueva es igual a la actual
+                  value:
+                    status: 400
+                    error: "BAD_REQUEST"
+                    message: "La nueva contraseña no puede ser igual a la actual"
+                    field: "newPassword"
+                    timestamp: "2025-04-15T12:00:00Z"
+                password_debil:
+                  summary: No cumple requisitos mínimos
+                  value:
+                    status: 400
+                    error: "BAD_REQUEST"
+                    message: "La contraseña debe tener mínimo 8 caracteres, una mayúscula y un número"
+                    field: "newPassword"
+                    timestamp: "2025-04-15T12:00:00Z"
+
+        '401':
+          description: Contraseña actual incorrecta o JWT inválido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                password_incorrecta:
+                  summary: La contraseña actual no coincide
+                  value:
+                    status: 401
+                    error: "UNAUTHORIZED"
+                    message: "La contraseña actual es incorrecta"
+                    field: "currentPassword"
+                    timestamp: "2025-04-15T12:00:00Z"
+                jwt_invalido:
+                  summary: JWT expirado o inválido
+                  value:
+                    status: 401
+                    error: "UNAUTHORIZED"
+                    message: "Token inválido o expirado. Inicia sesión de nuevo."
+                    field: null
+                    timestamp: "2025-04-15T12:00:00Z"
+
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ─────────────────────────────────────────────
+  # PREFERENCIAS
+  # ─────────────────────────────────────────────
+  /users/me/preferences:
+    patch:
+      tags:
+        - Users
+      summary: Actualizar preferencias
+      description: |
+        Guarda las preferencias de UI del usuario en BD para que
+        se sincronicen entre dispositivos en v2.
+
+        **Notas de implementación:**
+        - Guardar en tabla `user_preferences` (userId, darkMode, language)
+          o como columna JSON en la tabla usuarios — cualquiera funciona.
+        - El frontend aplica el cambio visualmente de inmediato (optimistic update)
+          y llama este endpoint en segundo plano.
+        - Si en v2 se agregan más idiomas, solo se agrega al enum — no rompe el contrato.
+      operationId: updatePreferences
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePreferencesRequest'
+            examples:
+              activar_dark_mode:
+                summary: Activar modo oscuro
+                value:
+                  darkMode: true
+                  language: "es"
+              cambiar_idioma:
+                summary: Cambiar a inglés
+                value:
+                  darkMode: false
+                  language: "en"
+
+      responses:
+        '200':
+          description: Preferencias actualizadas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreferencesResponse'
+              example:
+                darkMode: true
+                language: "es"
+
+        '400':
+          description: Idioma no soportado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: 400
+                error: "BAD_REQUEST"
+                message: "Idioma no soportado. Opciones disponibles: es, en"
+                field: "language"
+                timestamp: "2025-04-15T12:00:00Z"
+
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ─────────────────────────────────────────────
+  # ELIMINAR CUENTA
+  # ─────────────────────────────────────────────
+    delete:
+      tags:
+        - Users
+      summary: Solicitar eliminación de cuenta
+      description: |
+        Marca la cuenta para eliminación (soft delete).
+        La cuenta no se borra inmediatamente — el usuario tiene 30 días
+        para cancelar antes de que un job en AWS elimine todo definitivamente.
+
+        **Flujo completo:**
+        1. Usuario solicita eliminar → `deleted_at = now()` en BD.
+        2. Se cierra sesión en todos los dispositivos automáticamente.
+        3. Usuario recibe correo confirmando la eliminación programada.
+        4. Durante 30 días: si intenta hacer login, ve pantalla de cuenta
+           en proceso de eliminación con opción de cancelar.
+        5. Después de 30 días: AWS Lambda / scheduled job borra todos
+           los datos (usuario, notas, tags, tokens) de forma permanente.
+
+        **Notas de implementación:**
+        - Requiere confirmación con contraseña para evitar eliminaciones accidentales.
+        - Soft delete: `deleted_at = now()`, `deletion_scheduled_at = now() + 30 días`.
+        - Invalidar todos los refreshTokens del usuario al solicitar eliminación.
+        - Si el usuario intenta login con cuenta marcada para eliminar →
+          devolver 403 con mensaje especial y opción de cancelar.
+      operationId: deleteMyAccount
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeleteAccountRequest'
+            example:
+              password: "MiPassword123!"
+              confirmation: "ELIMINAR"
+
+      responses:
+        '200':
+          description: Eliminación programada — 30 días para cancelar
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              example:
+                message: "Tu cuenta será eliminada el 2025-05-15. Puedes cancelar este proceso antes de esa fecha."
+                deletionScheduledAt: "2025-05-15T10:30:00Z"
+
+        '400':
+          description: Confirmación incorrecta o contraseña inválida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                confirmacion_incorrecta:
+                  summary: No escribió ELIMINAR
+                  value:
+                    status: 400
+                    error: "BAD_REQUEST"
+                    message: "Debes escribir ELIMINAR para confirmar"
+                    field: "confirmation"
+                    timestamp: "2025-04-15T12:00:00Z"
+
+        '401':
+          description: Contraseña incorrecta
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: 401
+                error: "UNAUTHORIZED"
+                message: "Contraseña incorrecta"
+                field: "password"
+                timestamp: "2025-04-15T12:00:00Z"
+
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /users/me/cancel-deletion:
+    post:
+      tags:
+        - Users
+      summary: Cancelar eliminación de cuenta
+      description: |
+        Cancela la eliminación programada dentro del período de gracia de 30 días.
+        Reactiva la cuenta completamente.
+
+        **Notas de implementación:**
+        - Limpiar `deleted_at` y `deletion_scheduled_at` → NULL en BD.
+        - Devolver JWT nuevo para que el usuario quede logueado de inmediato.
+      operationId: cancelAccountDeletion
+      security:
+        - BearerAuth: []
+
+      responses:
+        '200':
+          description: Eliminación cancelada — cuenta reactivada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              example:
+                message: "Tu cuenta ha sido reactivada correctamente."
+                deletionScheduledAt: null
+
+        '400':
+          description: La cuenta no tiene una eliminación programada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: 400
+                error: "BAD_REQUEST"
+                message: "Esta cuenta no tiene una eliminación programada."
+                field: null
+                timestamp: "2025-04-15T12:00:00Z"
+
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ─────────────────────────────────────────────
+  # LOGOUT
+  # ─────────────────────────────────────────────
+  /auth/logout:
+    post:
+      tags:
+        - Auth
+      summary: Cerrar sesión en este dispositivo
+      description: |
+        Invalida el refreshToken del dispositivo actual.
+        El accessToken expira naturalmente en 24h — no se puede invalidar
+        directamente porque es stateless. Por eso el frontend debe
+        eliminarlo de memoria al hacer logout.
+
+        **Notas de implementación:**
+        - Recibir el refreshToken (de la httpOnly cookie o del body).
+        - Buscarlo en la tabla refresh_tokens y eliminarlo.
+        - El frontend elimina el accessToken de memoria y redirige al login.
+      operationId: logout
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LogoutRequest'
+            example:
+              refreshToken: "dGhpcyBpcyBhIHJlZnJlc2g..."
+
+      responses:
+        '200':
+          description: Sesión cerrada exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              example:
+                message: "Sesión cerrada correctamente"
+
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /auth/logout-all:
+    post:
+      tags:
+        - Auth
+      summary: Cerrar sesión en todos los dispositivos
+      description: |
+        Invalida todos los refreshTokens del usuario — cierra sesión
+        en todos los dispositivos donde esté logueado.
+
+        **v1:** Disponible en web.
+        **v2:** Se vuelve más relevante cuando haya app móvil.
+
+        **Notas de implementación:**
+        - Eliminar todos los registros de refresh_tokens donde userId = sub del JWT.
+        - El usuario queda deslogueado en todos lados, incluyendo el dispositivo actual.
+        - Devolver 200 aunque no hubiera tokens activos — idempotente.
+      operationId: logoutAll
+      security:
+        - BearerAuth: []
+
+      responses:
+        '200':
+          description: Todas las sesiones cerradas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              example:
+                message: "Se cerraron todas las sesiones activas"
+                sessionsClosedCount: 3
+
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+components:
+  responses:
+    Unauthorized:
+      description: JWT ausente, inválido o expirado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: 401
+            error: "UNAUTHORIZED"
+            message: "Token inválido o expirado. Inicia sesión de nuevo."
+            field: null
+            timestamp: "2025-04-15T12:00:00Z"
+
+    InternalError:
+      description: Error interno del servidor
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: 500
+            error: "INTERNAL_SERVER_ERROR"
+            message: "Ocurrió un error inesperado. Intenta de nuevo."
+            timestamp: "2025-04-15T12:00:00Z"
+
+  schemas:
+
+    UpdateNameRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 100
+          description: Nuevo nombre completo del usuario
+          example: "Ana García López"
+
+    UpdatePhoneRequest:
+      type: object
+      required:
+        - phone
+      properties:
+        phone:
+          type: string
+          nullable: true
+          pattern: '^\+?[1-9]\d{7,14}$'
+          description: |
+            Nuevo teléfono en formato internacional.
+            Enviar null para eliminar el teléfono del perfil.
+            En v2 este campo desencadenará un flujo de verificación por SMS.
+          example: "+52 55 9876 5432"
+
+    ChangePasswordRequest:
+      type: object
+      required:
+        - currentPassword
+        - newPassword
+        - confirmPassword
+      properties:
+        currentPassword:
+          type: string
+          format: password
+          description: Contraseña actual — para verificar identidad antes de cambiar.
+          example: "MiPassword123!"
+        newPassword:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 72
+          description: Nueva contraseña. No puede ser igual a la actual.
+          example: "NuevoPassword456!"
+        confirmPassword:
+          type: string
+          format: password
+          description: Debe ser idéntica a newPassword.
+          example: "NuevoPassword456!"
+        closeOtherSessions:
+          type: boolean
+          default: false
+          description: |
+            Si true, invalida todos los refreshTokens del usuario excepto
+            el del dispositivo actual. Recomendado si el usuario sospecha
+            que alguien más tiene acceso a su cuenta.
+          example: false
+
+    UpdatePreferencesRequest:
+      type: object
+      required:
+        - darkMode
+        - language
+      properties:
+        darkMode:
+          type: boolean
+          description: Activar o desactivar el modo oscuro en la UI.
+          example: true
+        language:
+          type: string
+          enum:
+            - es
+            - en
+          description: |
+            Idioma de la interfaz.
+            - es: Español (default).
+            - en: English.
+            En v2 se pueden agregar más valores al enum sin romper el contrato.
+          example: "es"
+
+    DeleteAccountRequest:
+      type: object
+      required:
+        - password
+        - confirmation
+      properties:
+        password:
+          type: string
+          format: password
+          description: Contraseña actual — para verificar identidad antes de eliminar.
+          example: "MiPassword123!"
+        confirmation:
+          type: string
+          description: |
+            El usuario debe escribir exactamente "ELIMINAR" para confirmar.
+            Previene eliminaciones accidentales.
+          example: "ELIMINAR"
+
+    LogoutRequest:
+      type: object
+      required:
+        - refreshToken
+      properties:
+        refreshToken:
+          type: string
+          description: RefreshToken del dispositivo actual a invalidar.
+          example: "dGhpcyBpcyBhIHJlZnJlc2g..."
+
+    UserProfileResponse:
+      type: object
+      description: Perfil completo del usuario — nunca incluir password_hash ni tokens internos
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        name:
+          type: string
+          example: "Ana García"
+        email:
+          type: string
+          format: email
+          description: El email no es editable en v1.
+          example: "ana@email.com"
+        phone:
+          type: string
+          nullable: true
+          example: "+52 55 1234 5678"
+        emailVerified:
+          type: boolean
+          example: true
+        authProvider:
+          type: string
+          enum:
+            - EMAIL
+            - GOOGLE
+          example: "EMAIL"
+        preferences:
+          $ref: '#/components/schemas/PreferencesResponse'
+        createdAt:
+          type: string
+          format: date-time
+          example: "2025-04-15T10:30:00Z"
+        deletionScheduledAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: |
+            Fecha en que la cuenta será eliminada definitivamente.
+            Null si la cuenta no está marcada para eliminar.
+          example: null
+
+    PreferencesResponse:
+      type: object
+      properties:
+        darkMode:
+          type: boolean
+          example: false
+        language:
+          type: string
+          enum:
+            - es
+            - en
+          example: "es"
+
+    MessageResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: "Operación exitosa"
+        sessionsClosedCount:
+          type: integer
+          nullable: true
+          description: Solo presente en logout-all y change-password con closeOtherSessions=true.
+          example: 3
+        deletionScheduledAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Solo presente en delete y cancel-deletion.
+          example: null
+
+    ErrorResponse:
+      type: object
+      properties:
+        status:
+          type: integer
+          example: 400
+        error:
+          type: string
+          example: "BAD_REQUEST"
+        message:
+          type: string
+          example: "El nombre debe tener entre 2 y 100 caracteres"
+        field:
+          type: string
+          nullable: true
+          example: "name"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2025-04-15T12:00:00Z"
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT obtenido en /auth/login o /auth/verify-email.
+        Claims: sub (userId), iat, exp. Sin roles en v1.
+        Enviar como: Authorization: Bearer {accessToken}

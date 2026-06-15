@@ -1,0 +1,445 @@
+openapi: 3.0.3
+
+info:
+  title: TaskFlow API
+  description: Contrato del módulo de tags
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Local development
+  - url: https://api.taskflow.com/v1
+    description: Production (AWS)
+
+tags:
+  - name: Tags
+    description: CRUD de tags del usuario autenticado
+
+paths:
+
+  /tags:
+    get:
+      tags:
+        - Tags
+      summary: Obtener todos los tags del usuario
+      description: |
+        Devuelve todos los tags creados por el usuario autenticado.
+        No hay paginación — un usuario no va a tener cientos de tags,
+        así que se devuelven todos de una sola vez.
+        Cada tag incluye el conteo de notas que tiene asignadas.
+
+        **Notas de implementación:**
+        - Extraer userId del JWT, nunca recibirlo como parámetro.
+        - Si el usuario no tiene tags, devolver 200 con lista vacía.
+        - El campo noteCount se calcula con COUNT en la query, no en código.
+      operationId: getAllTags
+      security:
+        - BearerAuth: []
+
+      responses:
+        '200':
+          description: Lista de tags del usuario
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tags:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TagResponse'
+              example:
+                tags:
+                  - id: "t1a2b3c4-d5e6-7890-abcd-ef1234567890"
+                    name: "Personal"
+                    color: "#FF6B6B"
+                    noteCount: 8
+                    createdAt: "2025-04-10T09:00:00Z"
+                  - id: "t2b3c4d5-e6f7-8901-bcde-f12345678901"
+                    name: "Trabajo"
+                    color: "#4ECDC4"
+                    noteCount: 15
+                    createdAt: "2025-04-10T09:05:00Z"
+                  - id: "t3c4d5e6-f7a8-9012-cdef-123456789012"
+                    name: "Escuela"
+                    color: "#45B7D1"
+                    noteCount: 0
+                    createdAt: "2025-04-12T14:00:00Z"
+
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    post:
+      tags:
+        - Tags
+      summary: Crear tag nuevo
+      description: |
+        Crea un tag nuevo para el usuario autenticado.
+
+        **Notas de implementación:**
+        - El userId se extrae del JWT.
+        - No se permiten dos tags con el mismo nombre para el mismo usuario
+          (unique constraint en BD por userId + name).
+        - El color debe ser un hex válido de 7 caracteres (#RRGGBB).
+      operationId: createTag
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TagRequest'
+            example:
+              name: "Diario"
+              color: "#F7DC6F"
+
+      responses:
+        '201':
+          description: Tag creado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagResponse'
+              example:
+                id: "t4d5e6f7-a8b9-0123-defa-234567890123"
+                name: "Diario"
+                color: "#F7DC6F"
+                noteCount: 0
+                createdAt: "2025-04-15T11:00:00Z"
+
+        '400':
+          description: Datos inválidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                nombre_vacio:
+                  summary: Nombre vacío
+                  value:
+                    status: 400
+                    error: "BAD_REQUEST"
+                    message: "El nombre del tag no puede estar vacío"
+                    field: "name"
+                    timestamp: "2025-04-15T11:00:00Z"
+                color_invalido:
+                  summary: Formato de color inválido
+                  value:
+                    status: 400
+                    error: "BAD_REQUEST"
+                    message: "El color debe ser un valor hexadecimal válido. Ejemplo: #FF6B6B"
+                    field: "color"
+                    timestamp: "2025-04-15T11:00:00Z"
+
+        '409':
+          description: Ya existe un tag con ese nombre para este usuario
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: 409
+                error: "CONFLICT"
+                message: "Ya tienes un tag con ese nombre"
+                field: "name"
+                timestamp: "2025-04-15T11:00:00Z"
+
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /tags/{tagId}:
+    put:
+      tags:
+        - Tags
+      summary: Editar tag
+      description: |
+        Actualiza el nombre o color de un tag existente.
+        Verificar que el tag pertenezca al usuario del JWT.
+      operationId: updateTag
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TagId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TagRequest'
+            examples:
+              cambiar_nombre:
+                summary: Solo cambiar el nombre
+                value:
+                  name: "Vida personal"
+                  color: "#FF6B6B"
+              cambiar_color:
+                summary: Solo cambiar el color
+                value:
+                  name: "Personal"
+                  color: "#C0392B"
+
+      responses:
+        '200':
+          description: Tag actualizado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagResponse'
+              example:
+                id: "t1a2b3c4-d5e6-7890-abcd-ef1234567890"
+                name: "Vida personal"
+                color: "#FF6B6B"
+                noteCount: 8
+                createdAt: "2025-04-10T09:00:00Z"
+
+        '400':
+          description: Datos inválidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: 400
+                error: "BAD_REQUEST"
+                message: "El nombre del tag no puede estar vacío"
+                field: "name"
+                timestamp: "2025-04-15T12:00:00Z"
+
+        '404':
+          description: Tag no encontrado o no pertenece al usuario
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: 404
+                error: "NOT_FOUND"
+                message: "Tag no encontrado"
+                field: null
+                timestamp: "2025-04-15T12:00:00Z"
+
+        '409':
+          description: Ya existe otro tag con ese nombre para este usuario
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: 409
+                error: "CONFLICT"
+                message: "Ya tienes un tag con ese nombre"
+                field: "name"
+                timestamp: "2025-04-15T12:00:00Z"
+
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    delete:
+      tags:
+        - Tags
+      summary: Borrar tag
+      description: |
+        Elimina un tag del usuario. 
+
+        **Comportamiento según el parámetro `force`:**
+        - `force=false` (default): Si el tag tiene notas, devuelve 409 con el
+          conteo de notas afectadas para que el frontend muestre la advertencia
+          de confirmación al usuario.
+        - `force=true`: Borra el tag y desvincula todas sus notas
+          (tag_id = NULL en las notas). Todo en una sola transacción.
+
+        **Notas de implementación:**
+        - Verificar que el tag pertenezca al usuario del JWT.
+        - Con force=true: usar SP o @Transactional para garantizar atomicidad —
+          primero UPDATE notas SET tag_id = NULL, luego DELETE tag.
+        - Devuelve 204 sin body en borrado exitoso.
+      operationId: deleteTag
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TagId'
+        - name: force
+          in: query
+          required: false
+          description: |
+            false (default): abortar si el tag tiene notas y devolver 409.
+            true: borrar el tag y desvincular sus notas automáticamente.
+          schema:
+            type: boolean
+            default: false
+          example: false
+
+      responses:
+        '204':
+          description: Tag eliminado exitosamente (sin body)
+
+        '404':
+          description: Tag no encontrado o no pertenece al usuario
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: 404
+                error: "NOT_FOUND"
+                message: "Tag no encontrado"
+                field: null
+                timestamp: "2025-04-15T12:00:00Z"
+
+        '409':
+          description: |
+            El tag tiene notas asignadas y force=false.
+            El frontend debe mostrar modal de confirmación con el noteCount
+            y llamar de nuevo con force=true si el usuario confirma.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteTagConflictResponse'
+              example:
+                status: 409
+                error: "CONFLICT"
+                message: "Este tag tiene 5 notas asignadas. ¿Deseas eliminarlo de todas formas?"
+                noteCount: 5
+                timestamp: "2025-04-15T12:00:00Z"
+
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+components:
+  parameters:
+    TagId:
+      name: tagId
+      in: path
+      required: true
+      description: UUID del tag
+      schema:
+        type: string
+        format: uuid
+      example: "t1a2b3c4-d5e6-7890-abcd-ef1234567890"
+
+  responses:
+    Unauthorized:
+      description: JWT ausente, inválido o expirado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: 401
+            error: "UNAUTHORIZED"
+            message: "Token inválido o expirado. Inicia sesión de nuevo."
+            field: null
+            timestamp: "2025-04-15T11:00:00Z"
+
+    InternalError:
+      description: Error interno del servidor
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: 500
+            error: "INTERNAL_SERVER_ERROR"
+            message: "Ocurrió un error inesperado. Intenta de nuevo."
+            timestamp: "2025-04-15T11:00:00Z"
+
+  schemas:
+
+    TagRequest:
+      type: object
+      required:
+        - name
+        - color
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 50
+          description: Nombre del tag — único por usuario
+          example: "Personal"
+        color:
+          type: string
+          pattern: '^#[0-9A-Fa-f]{6}$'
+          description: Color en formato hexadecimal (#RRGGBB)
+          example: "#FF6B6B"
+
+    TagResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "t1a2b3c4-d5e6-7890-abcd-ef1234567890"
+        name:
+          type: string
+          example: "Personal"
+        color:
+          type: string
+          example: "#FF6B6B"
+        noteCount:
+          type: integer
+          description: Cantidad de notas que tienen este tag asignado
+          example: 8
+        createdAt:
+          type: string
+          format: date-time
+          example: "2025-04-10T09:00:00Z"
+
+    DeleteTagConflictResponse:
+      type: object
+      description: Respuesta especial cuando se intenta borrar un tag con notas y force=false
+      properties:
+        status:
+          type: integer
+          example: 409
+        error:
+          type: string
+          example: "CONFLICT"
+        message:
+          type: string
+          example: "Este tag tiene 5 notas asignadas. ¿Deseas eliminarlo de todas formas?"
+        noteCount:
+          type: integer
+          description: Cantidad de notas que quedarán sin tag si se confirma el borrado
+          example: 5
+        timestamp:
+          type: string
+          format: date-time
+          example: "2025-04-15T12:00:00Z"
+
+    ErrorResponse:
+      type: object
+      properties:
+        status:
+          type: integer
+          example: 404
+        error:
+          type: string
+          example: "NOT_FOUND"
+        message:
+          type: string
+          example: "Tag no encontrado"
+        field:
+          type: string
+          nullable: true
+          example: null
+        timestamp:
+          type: string
+          format: date-time
+          example: "2025-04-15T12:00:00Z"
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT obtenido en /auth/login o /auth/register.

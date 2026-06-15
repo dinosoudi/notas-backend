@@ -1,0 +1,622 @@
+openapi: 3.0.3
+
+info:
+  title: TaskFlow API
+  description: Contrato del módulo de notas
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Local development
+  - url: https://api.taskflow.com/v1
+    description: Production (AWS)
+
+tags:
+  - name: Notes
+    description: CRUD de notas del usuario autenticado
+
+paths:
+
+  /notes:
+    get:
+      tags:
+        - Notes
+      summary: Obtener todas las notas del usuario
+      description: |
+        Devuelve todas las notas del usuario autenticado con paginación.
+        Las notas de otros usuarios nunca son visibles — el backend filtra
+        por el userId extraído del JWT, no por parámetro del request.
+
+        **Notas de implementación:**
+        - Extraer userId del JWT claim `sub`, nunca recibirlo como parámetro.
+        - Ordenar por `updatedAt DESC` por defecto (las más recientes primero).
+        - Si el usuario no tiene notas, devolver 200 con lista vacía — no 404.
+      operationId: getAllNotes
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          required: false
+          description: Número de página (empieza en 0)
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          example: 0
+        - name: size
+          in: query
+          required: false
+          description: Cantidad de notas por página
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+          example: 20
+        - name: sort
+          in: query
+          required: false
+          description: Campo por el que ordenar
+          schema:
+            type: string
+            enum: [updatedAt, createdAt, completed]
+            default: updatedAt
+          example: updatedAt
+        - name: direction
+          in: query
+          required: false
+          description: Dirección del ordenamiento
+          schema:
+            type: string
+            enum: [ASC, DESC]
+            default: DESC
+          example: DESC
+
+      responses:
+        '200':
+          description: Lista paginada de notas del usuario
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotePageResponse'
+              example:
+                content:
+                  - id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+                    content: "Comprar leche, huevos y pan"
+                    completed: false
+                    tag:
+                      id: "t1a2b3c4-d5e6-7890-abcd-ef1234567890"
+                      name: "Personal"
+                      color: "#FF6B6B"
+                    createdAt: "2025-04-15T10:00:00Z"
+                    updatedAt: "2025-04-15T10:00:00Z"
+                  - id: "b2c3d4e5-f6a7-8901-bcde-f12345678901"
+                    content: "Revisar pull request de Omar"
+                    completed: true
+                    tag:
+                      id: "t2b3c4d5-e6f7-8901-bcde-f12345678901"
+                      name: "Trabajo"
+                      color: "#4ECDC4"
+                    createdAt: "2025-04-14T09:00:00Z"
+                    updatedAt: "2025-04-15T08:30:00Z"
+                page: 0
+                size: 20
+                totalElements: 2
+                totalPages: 1
+                first: true
+                last: true
+
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    post:
+      tags:
+        - Notes
+      summary: Crear nota nueva
+      description: |
+        Crea una nota nueva para el usuario autenticado.
+        El tag es opcional — una nota puede existir sin tag.
+
+        **Notas de implementación:**
+        - El userId se extrae del JWT, nunca viene en el body.
+        - Si se envía tagId, verificar que ese tag pertenezca al usuario
+          antes de asignarlo — nunca confiar en que el tagId es válido.
+        - Si el tagId no existe o pertenece a otro usuario → 404.
+      operationId: createNote
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NoteRequest'
+            examples:
+              con_tag:
+                summary: Nota con tag asignado
+                value:
+                  content: "Preparar presentación del sprint"
+                  tagId: "t1a2b3c4-d5e6-7890-abcd-ef1234567890"
+              sin_tag:
+                summary: Nota sin tag
+                value:
+                  content: "Idea random que se me ocurrió"
+                  tagId: null
+
+      responses:
+        '201':
+          description: Nota creada exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NoteResponse'
+              example:
+                id: "c3d4e5f6-a7b8-9012-cdef-123456789012"
+                content: "Preparar presentación del sprint"
+                completed: false
+                tag:
+                  id: "t1a2b3c4-d5e6-7890-abcd-ef1234567890"
+                  name: "Trabajo"
+                  color: "#4ECDC4"
+                createdAt: "2025-04-15T11:00:00Z"
+                updatedAt: "2025-04-15T11:00:00Z"
+
+        '400':
+          description: Contenido vacío o inválido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: 400
+                error: "BAD_REQUEST"
+                message: "El contenido de la nota no puede estar vacío"
+                field: "content"
+                timestamp: "2025-04-15T11:00:00Z"
+
+        '404':
+          description: El tag enviado no existe o no pertenece al usuario
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: 404
+                error: "NOT_FOUND"
+                message: "El tag seleccionado no existe"
+                field: "tagId"
+                timestamp: "2025-04-15T11:00:00Z"
+
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /notes/{noteId}:
+    get:
+      tags:
+        - Notes
+      summary: Obtener una nota por ID
+      description: |
+        Devuelve el detalle de una nota específica.
+        El backend verifica que la nota pertenezca al usuario del JWT — si
+        la nota existe pero es de otro usuario, devuelve 404 (no 403),
+        para no revelar que esa nota existe.
+      operationId: getNoteById
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/NoteId'
+
+      responses:
+        '200':
+          description: Detalle de la nota
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NoteResponse'
+              example:
+                id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+                content: "Comprar leche, huevos y pan"
+                completed: false
+                tag:
+                  id: "t1a2b3c4-d5e6-7890-abcd-ef1234567890"
+                  name: "Personal"
+                  color: "#FF6B6B"
+                createdAt: "2025-04-15T10:00:00Z"
+                updatedAt: "2025-04-15T10:00:00Z"
+
+        '404':
+          description: Nota no encontrada o no pertenece al usuario
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: 404
+                error: "NOT_FOUND"
+                message: "Nota no encontrada"
+                field: null
+                timestamp: "2025-04-15T11:00:00Z"
+
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    put:
+      tags:
+        - Notes
+      summary: Editar nota
+      description: |
+        Actualiza el contenido, el tag o el estado completed de una nota.
+        Es un PUT completo — se deben enviar todos los campos, incluso los
+        que no cambian.
+
+        **Notas de implementación:**
+        - Verificar que la nota pertenezca al usuario del JWT antes de editar.
+        - Si tagId es null, se desvincula el tag (nota queda sin tag).
+        - Actualizar updatedAt automáticamente en BD.
+      operationId: updateNote
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/NoteId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NoteRequest'
+            examples:
+              editar_contenido:
+                summary: Cambiar contenido y marcar como completada
+                value:
+                  content: "Comprar leche, huevos, pan y mantequilla"
+                  completed: true
+                  tagId: "t1a2b3c4-d5e6-7890-abcd-ef1234567890"
+              quitar_tag:
+                summary: Quitar el tag de la nota
+                value:
+                  content: "Comprar leche, huevos y pan"
+                  completed: false
+                  tagId: null
+
+      responses:
+        '200':
+          description: Nota actualizada exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NoteResponse'
+              example:
+                id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+                content: "Comprar leche, huevos, pan y mantequilla"
+                completed: true
+                tag:
+                  id: "t1a2b3c4-d5e6-7890-abcd-ef1234567890"
+                  name: "Personal"
+                  color: "#FF6B6B"
+                createdAt: "2025-04-15T10:00:00Z"
+                updatedAt: "2025-04-15T12:00:00Z"
+
+        '400':
+          description: Datos inválidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: 400
+                error: "BAD_REQUEST"
+                message: "El contenido de la nota no puede estar vacío"
+                field: "content"
+                timestamp: "2025-04-15T12:00:00Z"
+
+        '404':
+          description: Nota no encontrada o no pertenece al usuario
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: 404
+                error: "NOT_FOUND"
+                message: "Nota no encontrada"
+                field: null
+                timestamp: "2025-04-15T12:00:00Z"
+
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    delete:
+      tags:
+        - Notes
+      summary: Borrar nota
+      description: |
+        Elimina permanentemente una nota del usuario.
+        Verificar que pertenezca al usuario del JWT antes de borrar.
+        Devuelve 204 sin body — es el estándar para DELETE exitoso.
+      operationId: deleteNote
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/NoteId'
+
+      responses:
+        '204':
+          description: Nota eliminada exitosamente (sin body)
+
+        '404':
+          description: Nota no encontrada o no pertenece al usuario
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: 404
+                error: "NOT_FOUND"
+                message: "Nota no encontrada"
+                field: null
+                timestamp: "2025-04-15T12:00:00Z"
+
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /notes/tag/{tagId}:
+    get:
+      tags:
+        - Notes
+      summary: Obtener notas por tag
+      description: |
+        Devuelve todas las notas del usuario que pertenecen a un tag específico.
+        También con paginación — un tag puede tener muchas notas.
+
+        **Notas de implementación:**
+        - Verificar que el tag pertenezca al usuario del JWT.
+        - Si el tag existe pero no tiene notas, devolver 200 con lista vacía.
+      operationId: getNotesByTag
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: tagId
+          in: path
+          required: true
+          description: UUID del tag
+          schema:
+            type: string
+            format: uuid
+          example: "t1a2b3c4-d5e6-7890-abcd-ef1234567890"
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          example: 0
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+          example: 20
+
+      responses:
+        '200':
+          description: Lista paginada de notas del tag
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotePageResponse'
+              example:
+                content:
+                  - id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+                    content: "Comprar leche, huevos y pan"
+                    completed: false
+                    tag:
+                      id: "t1a2b3c4-d5e6-7890-abcd-ef1234567890"
+                      name: "Personal"
+                      color: "#FF6B6B"
+                    createdAt: "2025-04-15T10:00:00Z"
+                    updatedAt: "2025-04-15T10:00:00Z"
+                page: 0
+                size: 20
+                totalElements: 1
+                totalPages: 1
+                first: true
+                last: true
+
+        '404':
+          description: El tag no existe o no pertenece al usuario
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: 404
+                error: "NOT_FOUND"
+                message: "Tag no encontrado"
+                field: null
+                timestamp: "2025-04-15T11:00:00Z"
+
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+components:
+  parameters:
+    NoteId:
+      name: noteId
+      in: path
+      required: true
+      description: UUID de la nota
+      schema:
+        type: string
+        format: uuid
+      example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+
+  responses:
+    Unauthorized:
+      description: JWT ausente, inválido o expirado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: 401
+            error: "UNAUTHORIZED"
+            message: "Token inválido o expirado. Inicia sesión de nuevo."
+            field: null
+            timestamp: "2025-04-15T11:00:00Z"
+
+    InternalError:
+      description: Error interno del servidor
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: 500
+            error: "INTERNAL_SERVER_ERROR"
+            message: "Ocurrió un error inesperado. Intenta de nuevo."
+            timestamp: "2025-04-15T11:00:00Z"
+
+  schemas:
+
+    NoteRequest:
+      type: object
+      required:
+        - content
+      properties:
+        content:
+          type: string
+          minLength: 1
+          maxLength: 5000
+          description: Contenido de la nota
+          example: "Preparar presentación del sprint"
+        completed:
+          type: boolean
+          default: false
+          description: Estado de completado de la nota
+          example: false
+        tagId:
+          type: string
+          format: uuid
+          nullable: true
+          description: |
+            UUID del tag a asignar. Opcional — null para nota sin tag.
+            Enviar null explícitamente para quitar el tag en un PUT.
+          example: "t1a2b3c4-d5e6-7890-abcd-ef1234567890"
+
+    NoteResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        content:
+          type: string
+          example: "Comprar leche, huevos y pan"
+        completed:
+          type: boolean
+          example: false
+        tag:
+          $ref: '#/components/schemas/TagSummary'
+        createdAt:
+          type: string
+          format: date-time
+          example: "2025-04-15T10:00:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2025-04-15T10:00:00Z"
+
+    NotePageResponse:
+      type: object
+      description: Respuesta paginada de notas — estructura estándar de Spring Page
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/NoteResponse'
+        page:
+          type: integer
+          description: Página actual (empieza en 0)
+          example: 0
+        size:
+          type: integer
+          description: Tamaño de página solicitado
+          example: 20
+        totalElements:
+          type: integer
+          description: Total de notas del usuario (o del tag)
+          example: 45
+        totalPages:
+          type: integer
+          description: Total de páginas disponibles
+          example: 3
+        first:
+          type: boolean
+          description: true si es la primera página
+          example: true
+        last:
+          type: boolean
+          description: true si es la última página
+          example: false
+
+    TagSummary:
+      type: object
+      nullable: true
+      description: Resumen del tag asignado a la nota. Null si la nota no tiene tag.
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "t1a2b3c4-d5e6-7890-abcd-ef1234567890"
+        name:
+          type: string
+          example: "Personal"
+        color:
+          type: string
+          example: "#FF6B6B"
+
+    ErrorResponse:
+      type: object
+      properties:
+        status:
+          type: integer
+          example: 404
+        error:
+          type: string
+          example: "NOT_FOUND"
+        message:
+          type: string
+          example: "Nota no encontrada"
+        field:
+          type: string
+          nullable: true
+          example: null
+        timestamp:
+          type: string
+          format: date-time
+          example: "2025-04-15T11:00:00Z"
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT obtenido en /auth/login o /auth/register.
