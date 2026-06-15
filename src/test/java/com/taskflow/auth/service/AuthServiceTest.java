@@ -1,4 +1,3 @@
-/*
 package com.taskflow.auth.service;
 
 import com.taskflow.auth.dto.*;
@@ -21,7 +20,10 @@ import org.mockito.*;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.LocalDateTime;
+import java.util.HexFormat;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -131,13 +133,27 @@ class AuthServiceTest {
             user.setVerificationExpires(LocalDateTime.now().plusHours(1));
 
             when(userRepository.findByVerificationToken("token123")).thenReturn(Optional.of(user));
-            TokensDTO tokens = new TokensDTO();
-            when(authMapper.toUserDTO(user)).thenReturn(new UserDTO());
-            AuthResponse expected = new AuthResponse();
-            when(authMapper.toAuthResponse(anyString(), any(), eq(tokens)))
-                    .thenReturn(expected);
-            // mock generateTokens
-            mockGenerateTokens(user, tokens);
+
+            String accessToken = "access-token";
+            // Usar any() para evitar mismatch de UUID
+            when(jwtService.generateAccessToken(any(UUID.class))).thenReturn(accessToken);
+            when(jwtService.getRefreshWebExpiresIn()).thenReturn(604800L);
+            when(jwtService.getAccessTokenExpiresIn()).thenReturn(900L);
+
+            // Simular el guardado del refresh token
+            when(refreshTokenRepository.save(any(RefreshToken.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            // Simular el mapper para toTokensDTO y toAuthResponse
+            TokensDTO tokensDTO = new TokensDTO();
+            when(authMapper.toTokensDTO(eq(accessToken), anyString(), eq(900L), eq(604800L)))
+                    .thenReturn(tokensDTO);
+
+            UserDTO userDTO = new UserDTO();
+            when(authMapper.toUserDTO(user)).thenReturn(userDTO);
+
+            AuthResponse expectedResponse = new AuthResponse();
+            when(authMapper.toAuthResponse(eq("Correo verificado. ¡Bienvenido!"), eq(userDTO), eq(tokensDTO)))
+                    .thenReturn(expectedResponse);
 
             AuthResponse response = authService.verifyEmail("token123");
 
@@ -145,7 +161,7 @@ class AuthServiceTest {
             assertThat(user.getVerificationToken()).isNull();
             then(userRepository).should().verifyEmail(user.getId());
             then(refreshTokenRepository).should().save(any(RefreshToken.class));
-            assertThat(response).isSameAs(expected);
+            assertThat(response).isSameAs(expectedResponse);
         }
 
         @Test
@@ -200,11 +216,24 @@ class AuthServiceTest {
             User user = buildVerifiedUser();
             when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(user));
             when(passwordEncoder.matches("pass", user.getPasswordHash())).thenReturn(true);
+
+            // Mock para generateTokens
+            String accessToken = "access-token";
+            when(jwtService.generateAccessToken(user.getId())).thenReturn(accessToken);
+            when(jwtService.getRefreshWebExpiresIn()).thenReturn(604800L);
+            when(jwtService.getAccessTokenExpiresIn()).thenReturn(900L);
+            when(refreshTokenRepository.save(any(RefreshToken.class))).thenAnswer(inv -> inv.getArgument(0));
+
             TokensDTO tokens = new TokensDTO();
-            mockGenerateTokens(user, tokens);
-            when(authMapper.toUserDTO(user)).thenReturn(new UserDTO());
+            when(authMapper.toTokensDTO(eq(accessToken), anyString(), eq(900L), eq(604800L)))
+                    .thenReturn(tokens);
+
+            UserDTO userDTO = new UserDTO();
+            when(authMapper.toUserDTO(user)).thenReturn(userDTO);
+
             AuthResponse expected = new AuthResponse();
-            when(authMapper.toAuthResponse(anyString(), any(), eq(tokens))).thenReturn(expected);
+            when(authMapper.toAuthResponse(eq("Inicio de sesión exitoso"), eq(userDTO), eq(tokens)))
+                    .thenReturn(expected);
 
             AuthResponse response = authService.login(request);
 
@@ -347,26 +376,27 @@ class AuthServiceTest {
 
         @Test
         @DisplayName("Debe rotar el refresh token y devolver nuevos tokens")
-        void shouldRotateTokenAndReturnNewTokens() {
+        void shouldRotateTokenAndReturnNewTokens() throws Exception {
             RefreshRequest request = new RefreshRequest();
-            request.setRefreshToken("raw-refresh");
+            String rawRefreshToken = "raw-refresh";
+            request.setRefreshToken(rawRefreshToken);
 
-            // Stub del encoder con lógica condicional
-            when(passwordEncoder.encode(anyString())).thenAnswer(inv -> {
-                String arg = inv.getArgument(0);
-                return "raw-refresh".equals(arg) ? "hashed-refresh" : "new-hash";
-            });
+            // Calcular el hash igual que en AuthService (SHA-256)
+            String expectedHash = hashTokenManual(rawRefreshToken);
 
             RefreshToken oldToken = new RefreshToken();
             User user = buildVerifiedUser();
             oldToken.setUser(user);
 
-            when(refreshTokenRepository.findValidToken(eq("hashed-refresh"), any(LocalDateTime.class)))
+            when(refreshTokenRepository.findValidToken(eq(expectedHash), any(LocalDateTime.class)))
                     .thenReturn(Optional.of(oldToken));
 
             when(jwtService.generateAccessToken(user.getId())).thenReturn("new-access");
             when(jwtService.getRefreshWebExpiresIn()).thenReturn(604800L);
             when(jwtService.getAccessTokenExpiresIn()).thenReturn(900L);
+
+            // Simular guardado del nuevo refresh token
+            when(refreshTokenRepository.save(any(RefreshToken.class))).thenAnswer(inv -> inv.getArgument(0));
 
             RefreshResponse expected = new RefreshResponse();
             when(authMapper.toRefreshResponse(eq("new-access"), anyString(), eq(900L), eq(604800L)))
@@ -374,7 +404,7 @@ class AuthServiceTest {
 
             RefreshResponse response = authService.refresh(request);
 
-            then(refreshTokenRepository).should().deleteByTokenHash("hashed-refresh");
+            then(refreshTokenRepository).should().deleteByTokenHash(expectedHash);
             then(refreshTokenRepository).should().save(any(RefreshToken.class));
             assertThat(response).isSameAs(expected);
         }
@@ -561,11 +591,11 @@ class AuthServiceTest {
         @DisplayName("Debe eliminar el refresh token de la base de datos")
         void shouldDeleteRefreshToken() {
             String rawToken = "refresh-token";
-            when(passwordEncoder.encode(rawToken)).thenReturn("hashedToken");
+            String expectedHash = hashTokenManual(rawToken); // mismo helper
 
             authService.logout(rawToken);
 
-            then(refreshTokenRepository).should().deleteByTokenHash("hashedToken");
+            then(refreshTokenRepository).should().deleteByTokenHash(expectedHash);
         }
     }
 
@@ -646,6 +676,16 @@ class AuthServiceTest {
                 .isInstanceOf(UnauthorizedException.class)
                 .hasMessageContaining("eliminación");
     }
+
+    // Método auxiliar para calcular SHA-256
+    private String hashTokenManual(String rawToken) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(rawToken.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(hash);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
 }
 
-*/
