@@ -10,7 +10,7 @@ public class UpdatePhoneRequest {
     // En v2 este campo desencadenará verificación por SMS
     @Pattern(
             regexp = "^\\+?[1-9]\\d{7,14}$",
-            message = "Ingresa un número de teléfono válido en formato internacional. Ejemplo: +52 55 1234 5678"
+            message = "Ingresa un número de teléfono válido en formato internacional. Ejemplo: +525512345678, sin espacios"
     )
     private String phone;
 }
