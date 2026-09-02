@@ -49,6 +49,28 @@ Estructura de carpetas con tree y con tree /F para archivos
 | Prometheus | `http://localhost:9090` | —                          |
 | Grafana | `http://localhost:3001` | admin / Hesoyam:3          |
 
+Para conectarte a la BD desde pgAdmin:
+
+Host: postgres (nombre del servicio, no localhost)
+
+Port: 5432 
+
+Database: taskflow
+
+User: taskflow_user
+
+Password: taskflow_pass
+
+
+Levanta todos los servicios:
+
+| Servicio | URL |
+|---|---|
+| Frontend | http://localhost:3000 |
+| Backend | http://localhost:8080 |
+| pgAdmin | http://localhost:5050 |
+| Grafana | http://localhost:3001 |
+
 
 # Taskflow Backend
 
@@ -56,20 +78,20 @@ API REST para gestión de notas y tareas, construida con Java 21 + Spring Boot 3
 
 ## Stack
 
-| Capa | Tecnología |
-|---|---|
-| Lenguaje | Java 21 |
-| Framework | Spring Boot 3.5 |
-| Base de datos | PostgreSQL 16 |
-| Migraciones | Flyway |
-| Seguridad | JWT (stateless, sin sesiones) |
-| Cloud | AWS — ECS Fargate, RDS, ECR, ALB, Secrets Manager |
-| Infra como código | Terraform |
-| CI/CD | GitHub Actions |
-| Contenedores (local) | Docker Compose |
-| Observabilidad | Prometheus + Grafana |
+| Capa | Tecnología                                              |
+|---|---------------------------------------------------------|
+| Lenguaje | Java 21                                                 |
+| Framework | Spring Boot 3.5                                         |
+| Base de datos | PostgreSQL 16                                           |
+| Migraciones | Flyway                                                  |
+| Seguridad | JWT (stateless, refresh token)                          |
+| Cloud | AWS — ECS Fargate, RDS, ECR, ALB, Secrets Manager       |
+| Infra como código | Terraform                                               |
+| CI/CD | GitHub Actions                                          |
+| Contenedores (local) | Docker Compose                                          |
+| Observabilidad | Prometheus + Grafana                                    |
 | Logs | Logback + Logstash encoder (JSON en prod, texto en dev) |
-| Pruebas de carga | k6 |
+| Pruebas de carga | k6                                                      |
 
 ## Estructura del proyecto
 
